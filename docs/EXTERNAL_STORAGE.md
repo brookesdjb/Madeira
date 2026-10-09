@@ -67,6 +67,11 @@ All 65 Swift sources compiled/linked and the source-v8 app signed successfully;
 build/provenance output is `/tmp/madeira-ssd-source-v8`. After the user confirmed
 the test app was closed, installation succeeded. It was left closed for a focused
 disconnected-button, separate-storage-options and reconnect UI check.
+The user confirmed that this check worked as expected: the disconnected control
+and separate storage-options action behaved correctly. After reconnecting,
+one tap on Check SSD connection immediately restored Play. This validates manual
+connection refresh on source-v8; automatic detection is not required or claimed
+for that run.
 
 The first Brotato SSD install attempt in source-v2 stopped at the capacity gate:
 the user reported 0.2 GB required and 0.0 GB available. A read-only inspection of
