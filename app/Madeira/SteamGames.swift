@@ -974,6 +974,7 @@ struct SteamGameSheet: View {
             }
             .navigationTitle("Steam").navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
+            .monitorSteamStorage(libraryID: destinationID)
             .task(id: destinationID + storage.availability.rawValue + String(describing: steam.downloads[appID]?.state)) {
                 partial = steam.hasPartialDownload(appID)
                 freeSpace = nil

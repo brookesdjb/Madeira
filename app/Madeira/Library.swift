@@ -3225,6 +3225,7 @@ struct LibraryDetail: View {
             .task {
                 if entry.graphicsAPI == nil, entry.desktop != true, entry.storageID == "internal", let url = try? LibraryModel.executable(entry.relativePath) { entry.graphicsAPI = LibraryModel.graphicsImports(url) }
             }
+            .monitorSteamStorage(libraryID: entry.storageID)
             .onDisappear { if !leaving { model.save(entry) } }
             .onReceive(LibraryController.shared.commands) { command in
                 guard !leaving, !findCover, !importCover, !remove else { return }

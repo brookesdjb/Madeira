@@ -511,3 +511,20 @@ provenance: `/tmp/madeira-ssd-source-v10`. Device acceptance of the header and
 pause/reopen progress display remains pending; the next check resumes the
 existing paused download long enough to calculate totals, pauses it and reopens
 the app to compare the saved counts and Resume control.
+
+## Source-v11: removal detection while a card stays open
+
+The owner confirmed source-v10 shows Resume download and resumes successfully.
+Unplugging while paused did not disable Resume until the game card was closed
+and reopened. Reconnecting and using Check SSD connection then restored it.
+This isolates missing live refresh in the visible card; persisted byte counts
+across reopening have not yet been explicitly confirmed.
+
+The game-details and download-sheet views now run a foreground-only availability
+monitor. Every two seconds, while the library is considered connected, it uses
+the existing off-main-thread identity validation and publishes a failed check.
+The monitor holds its scoped lease between checks, releases it on failure or
+view-task cancellation, and stops with dismissal/backgrounding. It does not
+scan game payloads, start downloads or repeatedly reopen a disconnected provider;
+Check SSD connection remains the reconnect action. This changes detection while
+a card stays open, not the downloader's operation-time validation.

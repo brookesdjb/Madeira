@@ -270,6 +270,26 @@ import UniformTypeIdentifiers
         unsetenv("MADEIRA_EXTERNAL_LIBRARY_ID")
     }
 
+    /// Visible foreground cards must notice removal even when a paused transfer
+    /// performs no I/O. Retain access between checks, then release it on dismissal,
+    /// backgrounding or failure. Reconnection remains an explicit check.
+    func monitorAvailability(libraryID: String) async {
+        guard libraryID != SteamStorageLibrary.internalID else { return }
+        var access: SteamExternalLease?
+        defer { access?.keepAlive() }
+        while !Task.isCancelled, catalog.external?.id == libraryID {
+            if availability == .available || availability == .readOnly {
+                do { access = try await accessForOperation(libraryID: libraryID, write: false) }
+                catch { access = nil }
+            } else {
+                access = nil
+            }
+            do { try await Task.sleep(nanoseconds: 2_000_000_000) }
+            catch { return }
+            access?.keepAlive()
+        }
+    }
+
     func check() async {
         guard !checking, let external = catalog.external else { return }
         checking = true
@@ -285,6 +305,24 @@ import UniformTypeIdentifiers
             SteamGamesModel.shared.refresh()
         }
         catch { }
+    }
+}
+
+private struct SteamStorageVisibilityMonitor: ViewModifier {
+    let libraryID: String
+    @Environment(\.scenePhase) private var scenePhase
+
+    func body(content: Content) -> some View {
+        content.task(id: libraryID + String(describing: scenePhase)) {
+            guard scenePhase == .active else { return }
+            await SteamStorageModel.shared.monitorAvailability(libraryID: libraryID)
+        }
+    }
+}
+
+extension View {
+    func monitorSteamStorage(libraryID: String) -> some View {
+        modifier(SteamStorageVisibilityMonitor(libraryID: libraryID))
     }
 }
 
