@@ -528,3 +528,11 @@ view-task cancellation, and stops with dismissal/backgrounding. It does not
 scan game payloads, start downloads or repeatedly reopen a disconnected provider;
 Check SSD connection remains the reconnect action. This changes detection while
 a card stays open, not the downloader's operation-time validation.
+
+The games host suite passed under AddressSanitizer. All 65 Swift sources compiled
+and linked, and the source-v11 app passed strict/deep signature verification.
+After the owner confirmed the download was paused and app closed, installation
+and launch succeeded in the isolated test bundle. Build and provenance:
+`/tmp/madeira-ssd-source-v11`. On-device removal detection without closing the
+card remains to be confirmed; allow several seconds for the periodic check and
+provider response, then reconnect/check/resume in the same card.
