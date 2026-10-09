@@ -1,7 +1,11 @@
 # External SSD implementation record
 
-Status on 2026-10-09: **Brotato downloaded to the SSD and is user-confirmed playable
-through Madeira Dock using the scoped C: alias in the mixed-source build.**
+Status on 2026-10-09: **Brotato and Borderlands GOTY downloaded to the SSD and
+are user-confirmed playable through Madeira Dock using the scoped C: alias in
+the mixed-source build.** Borderlands also passed the reported unplug/reconnect
+download-resume sequence. Its successful launch followed the isolated runtime
+configuration change described below; DirectX returned a nonzero prerequisite
+status despite successful gameplay.
 The user reported that the first splash initially appeared windowed, then became
 fullscreen after tapping the game, and gameplay appeared normal. This records the
 observed focus behaviour without changing graphics or JIT settings. The live
@@ -76,8 +80,8 @@ for that run.
 ## Download recovery polish prepared while device testing is paused
 
 The owner selected Borderlands GOTY (8980) for the next interrupted-download
-test, then deferred it while away from the iPad. No interruption or resume result
-is claimed. The device baseline captured before that test contains 1,312 regular
+test, then deferred it while away from the iPad. The later device results are
+recorded below. The device baseline captured before that test contains 1,312 regular
 files, 1,368,320,927 bytes, and zero internal Steam game-payload bytes, excluding
 external aliases and symlinks (`/tmp/madeira-borderlands-ssd-baseline.json`).
 
@@ -98,12 +102,12 @@ Source-v9 keeps the installed source-v8 app untouched while preparing:
 
 Production host library and games suites passed under AddressSanitizer, with
 new cases for partial-install controls, pending updates, network errors,
-cancellation and destination revalidation. These are host results; the physical
-Borderlands interruption test remains pending.
+cancellation and destination revalidation. These are host results for source-v9;
+the subsequent physical Borderlands interruption test used source-v8.
 All 65 production Swift sources compiled and linked against the preserved
 runtime, and the source-v9 app was signed successfully. Ready build and provenance:
 `/tmp/madeira-ssd-source-v9`. It has not been installed; source-v8 remains on the
-iPad until the owner returns for the next test.
+iPad during the ongoing gameplay test.
 
 The owner subsequently reported that the installed build stopped gracefully at
 248 MB during the Borderlands GOTY download, requested SSD reconnection and
@@ -117,10 +121,28 @@ that all download/update work is complete or that the game is playable.
 The owner identified a prior-chat workaround, `MADEIRA_WOW_SMALL_VA_SLOTS=4`.
 The disposable app had no override (source default 2). At the owner's request,
 only its `env.MADEIRA_WOW_SMALL_VA_SLOTS` config key was set to 4 and read back to
-verify, preserving other settings and leaving the original app untouched. A full
-test-app restart and explicit one-time-installer retry are required. No PhysX
-success is claimed from changing this setting; the source-v9 build is still not
-installed.
+verify, preserving other settings and leaving the original app untouched.
+
+After reopening, the owner saw a paused transfer and resumed it. The reported
+local-file verification completed quickly, followed by one-time installation,
+Steam sign-in/license confirmation and successful fullscreen Borderlands
+GOTY gameplay. A fresh catalog inspection confirms installed=true, pending=false,
+13,148,046,648 bytes and the registered external library identity. Dock reports
+session-requested-app-listed=1, launch-install-directory-verified=1,
+launch-client-error=0 and launch-game-running=1.
+
+The latest prerequisite report records PhysX exit 0, AMD CPU exit 0 and DirectX
+exit -1073741800 (0xC0000018), followed by end. This confirms PhysX completed
+after the configuration change and restart, but does not prove the setting was
+the sole cause or that all prerequisites succeeded. Successful gameplay does
+not erase the DirectX installer failure; its impact remains unverified.
+
+The owner again saw the Windows desktop before the game reached fullscreen,
+as with Brotato, and reports not seeing this in stock Madeira. Record this as
+an unresolved startup-presentation difference, not a demonstrated SSD graphics
+regression. The source-v9 control fix covers the confusing Open/Play action while
+a transfer is pending, but has not yet been installed or device-tested. No app
+replacement or restart was performed during this gameplay check.
 
 The first Brotato SSD install attempt in source-v2 stopped at the capacity gate:
 the user reported 0.2 GB required and 0.0 GB available. A read-only inspection of
