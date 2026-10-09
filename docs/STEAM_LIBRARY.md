@@ -441,6 +441,13 @@ retry or repair. Uninstall also deletes saves stored beside game files. Cloud
 GameInstall roots use the selected library; unavailable storage stops comparison
 and transfer before missing files can be acknowledged as deletions.
 
+An interrupted install keeps Resume/Retry controls even when its partial record
+has been rediscovered. Reconnect the original library and use Check SSD connection
+before resuming; existing chunks are validated and valid ones reused. A failed
+network request is reported as a network error when the SSD is still accessible,
+and pausing does not mark the SSD disconnected. Updates use Pause/Resume rather
+than the first-install cancellation prompt that deletes partial files.
+
 See [EXTERNAL_STORAGE.md](EXTERNAL_STORAGE.md) for exact build/provenance and
 validation. The source integration is installed in an isolated diagnostic app;
 controlled external execution, Steam SSD download and Brotato gameplay through

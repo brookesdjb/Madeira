@@ -62,7 +62,7 @@ require('open(LibraryModel.shared.steamEntry(installed, title: item.name))' in g
 require(games.count('startDock(') == 0, 'the section never starts Dock itself: Play is on the Game details page')
 # A finished download: the game becomes a library entry, and its sheet's button reads Open (Game details).
 sheet = games[games.index('struct SteamGameSheet: View {'):games.index('struct SteamEntrySection')]
-require('Text("Open")' in sheet and 'if let installed = item.installed {' in sheet and 'dismiss(); open(entry)' in sheet,
+require('Text("Open")' in sheet and 'SteamGamesRules.canOpenInstalledGame(installed, hasTransfer: steam.downloads[appID] != nil)' in sheet and 'dismiss(); open(entry)' in sheet,
         "a finished download's sheet offers Open, which opens the Game details page")
 require('SteamGameSheet(appID: selection.id) { entry in' in games and 'open(entry) }' in games,
         'Open presents the Game details page after the download sheet closes')
@@ -132,7 +132,7 @@ require('next.firstIndex(where: { entry.steamAppID != nil && $0.steamAppID == en
         "a Steam game keeps one entry, and a details page saved later keeps the card's newer format")
 launch = content_view[content_view.index('private func launchLibraryEntry('):content_view.index('private func runWineFullSequence(')]
 require('if let appID = entry.steamAppID, !entry.startsSteamGameDirectly {' in launch and
-        'startDock(game, compactPool: MadeiraDockModel.shared.compactPool, profile: entry)' in launch,
+        'startDock(game, compactPool: MadeiraDockModel.shared.compactPool, profile: entry, storageChecked: storageChecked)' in launch,
         "Play on a Steam game's Game details page starts it through Madeira Dock with its own profile")
 # "Start with: The game" (SteamDirectStart): the program from Steam's launch configuration or the
 # Program picker starts like any library game, without Dock, a sign-in transfer or a client.
@@ -288,6 +288,10 @@ func record(_ appID: Int, _ name: String, _ folder: String, flags: Int) -> Strin
         require(R.status(installed: nil, transfer: nil, updateAvailable: false) == .notInstalled, "owned only: not installed")
         require(R.status(installed: partial, transfer: nil, updateAvailable: false) == .partlyInstalled, "an unfinished record is not playable")
         require(R.status(installed: ready, transfer: nil, updateAvailable: false) == .installed, "installed")
+        require(R.canOpenInstalledGame(ready, hasTransfer: false), "completed install can open its details")
+        require(!R.canOpenInstalledGame(ready, hasTransfer: true), "pending update keeps pause/resume controls instead of Open")
+        require(!R.canOpenInstalledGame(partial, hasTransfer: false) && !R.canOpenInstalledGame(partial, hasTransfer: true),
+                "rediscovered partial install keeps Install/Resume controls with or without an active transfer")
         require(R.status(installed: ready, transfer: nil, updateAvailable: true) == .updateAvailable, "installed with a newer build")
         require(R.status(installed: ready, transfer: .active(percent: 250), updateAvailable: true) == .downloading(100), "a download wins over the record; percent is clamped")
         require(R.status(installed: nil, transfer: .paused, updateAvailable: false).badge == "Paused", "paused pill")

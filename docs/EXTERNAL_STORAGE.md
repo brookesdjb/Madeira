@@ -73,6 +73,38 @@ one tap on Check SSD connection immediately restored Play. This validates manual
 connection refresh on source-v8; automatic detection is not required or claimed
 for that run.
 
+## Download recovery polish prepared while device testing is paused
+
+The owner selected Borderlands GOTY (8980) for the next interrupted-download
+test, then deferred it while away from the iPad. No interruption or resume result
+is claimed. The device baseline captured before that test contains 1,312 regular
+files, 1,368,320,927 bytes, and zero internal Steam game-payload bytes, excluding
+external aliases and symlinks (`/tmp/madeira-borderlands-ssd-baseline.json`).
+
+Source-v9 keeps the installed source-v8 app untouched while preparing:
+
+- Partial/discovered records and pending updates retain Pause/Resume/Retry
+  controls; they do not incorrectly replace those controls with Open.
+- The download sheet offers Check SSD connection and explains that partial
+  files remain on the original SSD. Resume, retry and repair are disabled while
+  that storage is known unavailable. Installed updates no longer show the
+  first-install cancellation prompt that says downloaded files will be deleted.
+- Game details names the selected library; free-space displays clear stale
+  values and refresh after storage availability changes.
+- An operation error is distinguished from loss of the volume. A healthy
+  destination preserves network, depot and low-space errors. Cancellation does
+  not re-query the provider or mark it disconnected. Failed validation of a
+  missing/replaced library still overrides completion and requires recovery.
+
+Production host library and games suites passed under AddressSanitizer, with
+new cases for partial-install controls, pending updates, network errors,
+cancellation and destination revalidation. These are host results; the physical
+Borderlands interruption test remains pending.
+All 65 production Swift sources compiled and linked against the preserved
+runtime, and the source-v9 app was signed successfully. Ready build and provenance:
+`/tmp/madeira-ssd-source-v9`. It has not been installed; source-v8 remains on the
+iPad until the owner returns for the next test.
+
 The first Brotato SSD install attempt in source-v2 stopped at the capacity gate:
 the user reported 0.2 GB required and 0.0 GB available. A read-only inspection of
 the disposable app's catalog confirmed the registered external destination;
