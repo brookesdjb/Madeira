@@ -151,7 +151,10 @@ verifies the written file, and is restricted to the disposable bundle ID.
 The integrated diagnostic build sets `MadeiraUsesPrebuiltNativeBridge` in its
 Info.plist. That makes direct launches pass a registered C: alias as their
 working directory and SteamAppPath, compensating for the pinned binary's old
-C:-only bridge. The executable and Dock expected-install path remain E:. The
+C:-only bridge. Source-v5 also registers that alias with Valve's client and uses
+the identical alias for Dock's expected-install check: the device's Steam log
+reported `Install folder E: not mounted` and Dock returned 41 for the E: library.
+Canonical saved locations and direct executable paths remain E:. The
 native source has an E: resolver, but this build does not compile that native
 file. External direct 32-bit launches are explicitly refused in this diagnostic
 build. The reference-counted production access lease, picker, selected-library

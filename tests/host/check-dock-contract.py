@@ -213,6 +213,14 @@ func jwt(_ claims: String) -> String {
         require((try? MadeiraDock.subject("opaque")) == nil && (try? MadeiraDock.subject(jwt(#"{"sub":"x"}"#))) == nil, "no usable subject: refused")
 
         // Host environment and launch.
+        let externalGame = DockGame(id: 6000, name: "External", installDir: "Fixture Game", library: "steamapps",
+                                    installed: true, customExecutables: false, storageID: "external-fixture")
+        MadeiraDock.configure(externalGame, compatibilityAlias: true)
+        require(env("MADEIRA_STEAM_HOST_EXPECTED_INSTALL") == "C:\\MadeiraExternalLibrary\\steamapps\\common\\Fixture Game",
+                "compatibility launch expects the same alias registered with Valve")
+        MadeiraDock.configure(externalGame)
+        require(env("MADEIRA_STEAM_HOST_EXPECTED_INSTALL") == externalGame.windowsInstallPath,
+                "normal external launch still checks E exactly")
         MadeiraDock.configure(alpha, launchOption: 7)
         require(env("MADEIRA_STEAM_HOST_LAUNCH_OPTION") == "7", "the original launch entry key reaches the host")
         MadeiraDock.configure(alpha, launchOption: 0)

@@ -778,6 +778,24 @@ func storageChecks() throws {
     require(foldersRecord["libraryfolders"]?["2"]?["path"]?.string == "E:\\" &&
             foldersRecord["libraryfolders"]?["2"]?["apps"]?["55"]?.string == "5678",
             "storage: Steam registration updates one stable E library entry")
+    try SteamLibraryFolders.register(externalID: id, name: "SSD", apps: [55: 5678], drive: internalDrive, compatibilityAlias: true)
+    var aliasParser = try SteamKeyValues(Data(contentsOf: foldersFile))
+    let aliasRecord = try aliasParser.read()
+    require(aliasRecord["libraryfolders"]?.fields.count == 3 &&
+            aliasRecord["libraryfolders"]?["2"]?["path"]?.string == "C:\\MadeiraExternalLibrary" &&
+            aliasRecord["libraryfolders"]?["2"]?["apps"]?["55"]?.string == "5678",
+            "storage: compatibility alias replaces the same library without duplicating its payload")
+    let externalApps = external.appendingPathComponent("steamapps")
+    try fm.createDirectory(at: externalApps, withIntermediateDirectories: true)
+    try Data(#"""
+    "AppState" { "appid" "55" "installdir" "Game" "name" "Fixture" "StateFlags" "4" }
+    """#.utf8).write(to: externalApps.appendingPathComponent("appmanifest_55.acf"))
+    try fm.createSymbolicLink(at: internalDrive.appendingPathComponent("MadeiraExternalLibrary"), withDestinationURL: external)
+    let externalFixtures = try MadeiraDock.games(library: library, root: external)
+    require(externalFixtures.count == 1, "storage: alias fixture is discoverable externally")
+    require(MadeiraDock.games(drive: internalDrive).isEmpty, "storage: C alias never reclassifies an SSD game as internal")
+    try fm.removeItem(at: externalApps)
+    try fm.removeItem(at: internalDrive.appendingPathComponent("MadeiraExternalLibrary"))
     let broken = Data("broken".utf8)
     try broken.write(to: foldersFile)
     do {

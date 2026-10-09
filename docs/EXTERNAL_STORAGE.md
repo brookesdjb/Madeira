@@ -43,7 +43,19 @@ runtime log showed the fixture executing and exiting with code 4, so this was
 not evidence that Brotato or Valve's client had started. The narrowly matched
 `clear-probe-overrides.py` cleanup removed only those two fixture settings in the
 disposable app, verified the written file and restarted the app. Its self-test
-passed. Another user Play check is pending; no game data or sign-in was changed.
+passed. No game data or sign-in was changed. The next user Play check returned
+Dock code 41. The numeric report confirmed `launch-install-directory-mismatch=1`,
+and Valve's content log stated `Install folder E: not mounted`. Both Steam library
+files listed E:, so registration alone did not establish client mount support.
+Source-v5 registers the existing owned `C:\MadeiraExternalLibrary` alias with
+Valve and sets Dock's expected path to that identical alias for this diagnostic
+runtime. The exact install-folder check, authentication and licence gates remain
+unchanged. Host tests cover matching registration/expectation and keeping aliased
+SSD games out of internal discovery. A physical retry is required.
+Source-v5 compiled/linked all 65 Swift sources, signed, installed and launched
+successfully (`/tmp/madeira-ssd-source-v5`, including provenance). The host
+library and Dock contract suites passed under AddressSanitizer. The user has
+been asked to retry Play with the new client registration.
 
 After installation, the disposable app container contains 951 regular files
 totalling 1,302,539,848 bytes, versus 863 files and 1,288,441,301 bytes before the
@@ -185,7 +197,7 @@ folder selection. It imports no copy of the folder.
 | Source Swift interface + prebuilt native runtime | 65-source compile/link, signing, isolated installation and launch PASS; user confirmed the interface opens |
 | External Windows EXE/DLL + relative asset/save | PASS in the isolated prebuilt-runtime harness, confirmed by the user |
 | Brotato SSD install | PASS, user confirmed; 245,990,176 payload bytes recorded externally; no internal game payload copy |
-| Dock and Brotato launch from SSD | Storage preflight passed; stale fixture launch override removed; actual game retry pending |
+| Dock and Brotato launch from SSD | E: rejected as unmounted by Valve; source-v5 C: alias retry pending |
 
 The Wine resolver input can be reproduced without initializing all of Wine:
 
@@ -198,7 +210,7 @@ WINE_FILE_C=/tmp/madeira-pinned-wine-file.c python3 tests/host/check-dock-path.p
 This checks the existing Unix namespace handoff; it is **not** proof of E: or
 external executable loading. No physical read-only, permission-revocation,
 >4 GiB, APFS/exFAT comparison, background expiration, game-session unplug, or
-internal-storage growth tests have been performed.
+tests have been performed. Internal-storage growth was measured above.
 
 ## Integrated library behavior and remaining device gate
 
@@ -234,8 +246,10 @@ lookup receives the external game root while scripts and registry remain interna
 **Mixed-source build limitation:** the preserved native binary has a C:-only
 working-directory and direct Steam-identity bridge. Only this diagnostic build
 creates a second owned `C:\MadeiraExternalLibrary` alias to the same scoped root
-and passes that alias as the direct launch's working folder/SteamAppPath. The
-canonical executable path, discovery and Dock expected-install path remain E:.
+and passes that alias as the direct launch's working folder/SteamAppPath. Valve's
+library registration and Dock expected-install path also use this alias after
+the client rejected the E: volume. Canonical executable paths and external
+discovery retain the registered external identity and E: path.
 This does not patch the native binary. Direct external 32-bit starts are refused
 in this build because its old PE probe cannot inspect E:. The native source fix
 is host-tested and syntax-checked, not linked into the published runtime.
