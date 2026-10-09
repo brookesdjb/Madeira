@@ -421,3 +421,13 @@ Madeira Dock or as The game).
   licenses are whatever Steam's license list contains.
 - Games installed by Valve's client in another library folder are listed and
   played but not updated or removed here.
+
+## External SSD work in progress
+
+The external-storage increment and its precise device/build evidence are in
+[EXTERNAL_STORAGE.md](EXTERNAL_STORAGE.md). The SSD folder-access prototype has
+passed data operations and bookmark reconnect tests on an iPad. External Steam
+installs and launches are not enabled yet; the existing library stays internal.
+Uninstall now waits for a running download and retains the library entry if
+filesystem deletion fails. A failure may leave partial payload removal, so
+reconnect the storage and retry or repair instead of treating it as success.

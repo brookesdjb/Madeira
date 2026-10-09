@@ -85,3 +85,16 @@ rebuild, signing and installation has NOT been performed. Until it is,
 docs/LICENSING.md keeps the relink capability marked unverified. The
 alternative the LGPL offers, shipping the application's object files, is
 not currently done.
+
+## External storage build preparation (2026-10-09)
+
+The pinned top-level Wine, FEX and DXMT revisions are now publicly accessible;
+Madeira Dock at `72558e416a390f3669457930f09a389e54f49556` was initialized
+successfully. Nested dependencies and the full native build remain unverified.
+The current local checkout lacks the native archives, toolchains and VC runtime
+resource required for a complete app build. See
+[EXTERNAL_STORAGE.md](EXTERNAL_STORAGE.md) for the exact attempt, provenance,
+missing inputs and a reproducible independently signed SSD data-access probe.
+`python3 tests/host/typecheck-ios.py` validates all production Swift sources
+without pretending to link the absent runtime. The Steam download host harness
+now supports both macOS native libraries and the existing Linux shims.

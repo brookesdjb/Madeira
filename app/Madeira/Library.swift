@@ -2573,6 +2573,11 @@ struct LibraryView: View {
             if SteamSettingsSection.shown, settingsShow("Steam", "Dock", "sign in", "account", "setup") {
                 SteamSettingsSection(open: { settingsSheet = $0 })
             }
+            if MadeiraConfig.flag("MADEIRA_EXTERNAL_STORAGE_PROBE", fallback: false), settingsShow("SSD", "storage", "external") {
+                Section("Storage diagnostics") {
+                    NavigationLink("External SSD access probe") { SteamStorageProbeView() }
+                }
+            }
             if settingsShow(".NET", "Mono", "Wine Mono", "framework", "download") { WineMonoSettingsSection() }
             if settingsShow("saves", "backup", "restore", "save games") { SavesSection() }
             if settingsShow("appearance", "liquid metal", "metal", "glass") {
