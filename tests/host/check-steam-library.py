@@ -686,6 +686,18 @@ func storageChecks() throws {
             "storage: genuinely full volume remains full")
     require((try? SteamStorageCapacity.resolve(important: nil, ordinary: -1, filesystem: nil)) == nil,
             "storage: unknown capacity is not unlimited space")
+    #if os(iOS) || os(macOS)
+    require(SteamExternalAccess.availability(for: POSIXError(.EACCES)) == .permissionDenied &&
+            SteamExternalAccess.availability(for: POSIXError(.EPERM)) == .permissionDenied,
+            "storage: POSIX permission failures are not labelled disconnected")
+    let wrappedReadOnly = NSError(domain: NSCocoaErrorDomain, code: NSFileWriteUnknownError,
+                                 userInfo: [NSUnderlyingErrorKey: POSIXError(.EROFS)])
+    require(SteamExternalAccess.availability(for: wrappedReadOnly) == .readOnly,
+            "storage: provider-wrapped read-only errors retain their actionable state")
+    require(SteamExternalAccess.availability(for: POSIXError(.ENOENT)) == .disconnected &&
+            SteamExternalAccess.availability(for: SteamStorageError.unavailable(.identityMismatch)) == .identityMismatch,
+            "storage: missing paths and explicit identity failures keep their distinct states")
+    #endif
     let fm = FileManager.default
     let base = fm.temporaryDirectory.appendingPathComponent("madeira-storage-" + UUID().uuidString)
     try fm.createDirectory(at: base, withIntermediateDirectories: false)
@@ -992,6 +1004,17 @@ func storageAsyncChecks() async throws {
     try handle.seek(toOffset: size - 4096)
     let tail = try handle.read(upToCount: 4096)
     require(tail == payload, "sparse: tail bytes survive preparation and reopening beyond 4 GiB")
+    for offset in [size - 2048, UInt64.max] {
+        var badChunks = manifest
+        badChunks.files = [.init(filename: "bad-chunk.bin", size: size, flags: 0,
+            chunks: [.init(sha: Data(sha), crc: 0, offset: offset, compressedSize: 100, uncompressedSize: 4096)])]
+        let invalidChunk = DepotDownloader.DepotPlan(depotID: 66, manifestGID: 99, key: Data(), manifest: badChunks,
+            hosts: [], auth: [:], declaredSize: size, health: ContentHostHealth())
+        do {
+            _ = try await DepotDownloader.prepareForInstall(plans: [invalidChunk], installURL: files, journalDir: journals)
+            require(false, "sparse: chunk range outside the file must be refused")
+        } catch { require(error is SteamError, "sparse: invalid or overflowing chunk offset is refused without a trap") }
+    }
     var oversized = manifest
     oversized.files = [.init(filename: "oversized.bin", size: UInt64.max, flags: 0, chunks: [])]
     let invalid = DepotDownloader.DepotPlan(depotID: 66, manifestGID: 99, key: Data(), manifest: oversized,

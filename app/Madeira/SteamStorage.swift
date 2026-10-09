@@ -487,10 +487,20 @@ enum SteamExternalAccess {
 
     static func availability(for error: Error) -> SteamStorageAvailability {
         if case SteamStorageError.unavailable(let state) = error { return state }
-        let e = error as NSError
-        if e.domain == NSCocoaErrorDomain {
-            if [NSFileReadNoPermissionError, NSFileWriteNoPermissionError].contains(e.code) { return .permissionDenied }
-            if e.code == NSFileWriteVolumeReadOnlyError { return .readOnly }
+        var current: NSError? = error as NSError
+        // Providers can wrap the filesystem error. Bound traversal in case a
+        // malformed error chain repeats; don't turn permissions into "unplugged".
+        for _ in 0..<8 {
+            guard let e = current else { break }
+            if e.domain == NSCocoaErrorDomain {
+                if [NSFileReadNoPermissionError, NSFileWriteNoPermissionError].contains(e.code) { return .permissionDenied }
+                if e.code == NSFileWriteVolumeReadOnlyError { return .readOnly }
+            }
+            if e.domain == NSPOSIXErrorDomain {
+                if [Int(EACCES), Int(EPERM)].contains(e.code) { return .permissionDenied }
+                if e.code == Int(EROFS) { return .readOnly }
+            }
+            current = e.userInfo[NSUnderlyingErrorKey] as? NSError
         }
         return .disconnected
     }

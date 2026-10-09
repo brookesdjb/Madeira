@@ -344,6 +344,10 @@ final class DepotDownloader {
                 var pendingBytes: UInt64 = 0
                 for (chunkIndex, chunk) in file.chunks.enumerated() {
                     try Task.checkCancellation()
+                    guard chunk.offset <= file.size,
+                          UInt64(chunk.uncompressedSize) <= file.size - chunk.offset else {
+                        throw SteamError.chunkDownloadFailed("A game chunk extends beyond its file's declared size.")
+                    }
                     let item = WorkItem(file: fileIndex, chunk: chunkIndex)
                     result.totalBytes += UInt64(chunk.compressedSize)
                     if done.contains(item.key), chunkAlreadyPresent(chunk, path: url.path) {

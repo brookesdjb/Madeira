@@ -585,3 +585,9 @@ before the fix, then passed normal SSD/case-insensitive saves, linked ancestors,
 local-only linked folders/files and dangling destination links after the fix.
 This is synthetic save-path evidence; it does not establish a live Steam Cloud
 upload or conflict-resolution result on iPad.
+
+The large-file fixture additionally rejects a chunk extending past its declared
+file length and an overflowing offset before any chunk read/write conversion.
+Storage error classification now retains POSIX permission/read-only failures,
+including errors wrapped by a provider, instead of calling them disconnected.
+The full production library suite passed with these boundary cases.
