@@ -504,3 +504,10 @@ Production host games and library checks passed under AddressSanitizer,
 including snapshot persistence through restart/rediscovery and cleanup on
 completion. The owner confirmed the app is closed with its download paused for
 replacement. Device build and acceptance are tracked below.
+
+Source-v10 compiled and linked all 65 Swift sources, passed strict/deep signature
+verification, installed successfully in the isolated app and launched. Build and
+provenance: `/tmp/madeira-ssd-source-v10`. Device acceptance of the header and
+pause/reopen progress display remains pending; the next check resumes the
+existing paused download long enough to calculate totals, pauses it and reopens
+the app to compare the saved counts and Resume control.
