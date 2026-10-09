@@ -970,7 +970,10 @@ final class SteamOwnedLibrary: ObservableObject {
     }
 
     /// Installs or updates a game: queues it and starts when nothing else downloads.
+    private var removingApps: Set<Int> = []
+
     func install(_ appID: Int) {
+        guard !removingApps.contains(appID) else { return }
         guard Self.enabled else { return }
         guard signedIn else { error = "Sign in to Steam to download games."; return }
         if active?.id == appID || queue.contains(appID) { return }
@@ -998,15 +1001,25 @@ final class SteamOwnedLibrary: ObservableObject {
     /// Stops a download. A first-time install also loses its partial files;
     /// an update of an installed game is only paused, never deleted.
     func cancelInstall(_ appID: Int, installed: Bool) {
+        guard !removingApps.contains(appID) else { return }
         let running = active?.id == appID ? active?.task : nil
         pause(appID)
-        downloads[appID] = nil
-        guard !installed, let game = game(appID) else { return }
+        guard !installed, let game = game(appID) else { downloads[appID] = nil; return }
+        removingApps.insert(appID)
         let apps = Self.steamApps
         Task { @MainActor in
+            defer { removingApps.remove(appID) }
             await running?.value
-            SteamInstallFiles.delete(appID: appID, folderName: game.folderName, steamApps: apps)
-            SteamLog.event("[steam-depot] cancelled app=\(appID) partial-files-removed=1")
+            do {
+                try await Task.detached(priority: .utility) {
+                    try SteamInstallFiles.delete(appID: appID, folderName: game.folderName, steamApps: apps)
+                }.value
+                downloads[appID] = nil
+                SteamLog.event("[steam-depot] cancelled app=\(appID) partial-files-removed=1")
+            } catch {
+                self.error = "The partial download could not be removed. Reconnect its storage and try again."
+                downloads[appID] = Download(state: .paused)
+            }
         }
     }
 
@@ -1021,17 +1034,28 @@ final class SteamOwnedLibrary: ObservableObject {
     /// Removes an install that Madeira's downloads own (its library folder is
     /// Madeira Dock's own), with its library entry (its per-game settings).
     func uninstall(_ game: DockGame) {
-        guard SteamInstallPaths.isManaged(library: game.library), !inSession else { return }
-        pause(game.id); downloads[game.id] = nil
-        LibraryModel.shared.removeSteam(appID: game.id)
-        // A reinstall evaluates the game's one-time installs again.
-        DockInstallers.setRunsNext(game.id, true, prefix: MadeiraDock.prefix)
-        let apps = Self.steamApps, id = game.id, folder = game.installDir
-        Task.detached(priority: .utility) {
-            SteamInstallFiles.delete(appID: id, folderName: folder, steamApps: apps)
-            await MainActor.run { SteamGamesModel.shared.refresh() }
+        guard SteamInstallPaths.isManaged(library: game.library), !inSession,
+              !removingApps.contains(game.id) else { return }
+        let id = game.id, folder = game.installDir, apps = Self.steamApps
+        let running = active?.id == id ? active?.task : nil
+        pause(id)
+        removingApps.insert(id)
+        Task { @MainActor in
+            defer { removingApps.remove(id) }
+            await running?.value
+            do {
+                try await Task.detached(priority: .utility) {
+                    try SteamInstallFiles.delete(appID: id, folderName: folder, steamApps: apps)
+                }.value
+                downloads[id] = nil
+                LibraryModel.shared.removeSteam(appID: game.id)
+                DockInstallers.setRunsNext(id, true, prefix: MadeiraDock.prefix)
+                SteamGamesModel.shared.refresh()
+                SteamLog.event("[steam-depot] uninstalled app=\(id)")
+            } catch {
+                self.error = "The game could not be fully removed. Its library entry has been kept. Reconnect its storage and try again."
+            }
         }
-        SteamLog.event("[steam-depot] uninstalled app=\(id)")
     }
 
     private func pump() {

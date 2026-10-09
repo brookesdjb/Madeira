@@ -48,26 +48,52 @@ enum SteamInstallFiles {
     /// resume journal and the records of the apps that own its shared depots
     /// (those describe the same folder). Only paths strictly inside
     /// `steamApps/common` are removed.
-    nonisolated static func delete(appID: Int, folderName: String, steamApps: URL) {
-        let fm = FileManager.default
-        let common = steamApps.appendingPathComponent("common", isDirectory: true).resolvingSymlinksInPath().standardizedFileURL
-        let folder = common.appendingPathComponent(safeFolderName(folderName)).resolvingSymlinksInPath().standardizedFileURL
-        if folder.path.hasPrefix(common.path + "/"), folder.deletingLastPathComponent().path == common.path {
-            try? fm.removeItem(at: folder)
+    nonisolated static func delete(appID: Int, folderName: String, steamApps: URL) throws {
+        guard appID > 0, folderName == safeFolderName(folderName) else {
+            throw CocoaError(.fileWriteInvalidFileName)
         }
-        let recordURL = steamApps.appendingPathComponent("appmanifest_\(appID).acf")
-        if let state = record(appID: appID, steamApps: steamApps) {
+        let fm = FileManager.default
+        let root = steamApps.resolvingSymlinksInPath().standardizedFileURL
+        var isDirectory: ObjCBool = false
+        guard fm.fileExists(atPath: root.path, isDirectory: &isDirectory), isDirectory.boolValue else {
+            throw CocoaError(.fileNoSuchFile)
+        }
+        // Validate every target before changing anything. Never follow common,
+        // downloading, a game folder or an install record outside this library.
+        func target(_ relative: String) throws -> URL {
+            var url = root
+            for component in relative.split(separator: "/") {
+                url.appendPathComponent(String(component))
+                do {
+                    let attributes = try fm.attributesOfItem(atPath: url.path)
+                    guard attributes[.type] as? FileAttributeType != .typeSymbolicLink else {
+                        throw CocoaError(.fileWriteInvalidFileName)
+                    }
+                } catch let error as NSError where error.domain == NSCocoaErrorDomain &&
+                    [NSFileReadNoSuchFileError, NSFileNoSuchFileError].contains(error.code) { }
+            }
+            return url
+        }
+        let folder = try target("common/" + folderName)
+        let journal = try target("downloading/\(appID)")
+        let recordURL = try target("appmanifest_\(appID).acf")
+        var shared: [URL] = []
+        if let state = record(appID: appID, steamApps: root) {
             for (_, owner) in (state["SharedDepots"]?.fields ?? [:]).sorted(by: { $0.key < $1.key }).prefix(64) {
-                guard let ownerID = owner.string.flatMap({ Int($0) }), ownerID > 0, ownerID != appID,
-                      let ownerState = record(appID: ownerID, steamApps: steamApps),
+                guard let ownerID = owner.string.flatMap({ Int($0) }), ownerID > 0, ownerID != appID else { continue }
+                let ownerURL = try target("appmanifest_\(ownerID).acf")
+                guard let ownerState = record(appID: ownerID, steamApps: root),
                       let dir = ownerState["installdir"]?.string,
-                      safeFolderName(dir).caseInsensitiveCompare(safeFolderName(folderName)) == .orderedSame
-                else { continue }
-                try? fm.removeItem(at: steamApps.appendingPathComponent("appmanifest_\(ownerID).acf"))
+                      dir.caseInsensitiveCompare(folderName) == .orderedSame else { continue }
+                shared.append(ownerURL)
             }
         }
-        try? fm.removeItem(at: recordURL)
-        try? fm.removeItem(at: steamApps.appendingPathComponent("downloading/\(appID)", isDirectory: true))
+        // Missing targets are already removed; every other I/O failure is real.
+        // Keep the primary install record until all payload/journal work succeeds.
+        for url in [folder, journal] + shared + [recordURL] {
+            do { try fm.removeItem(at: url) }
+            catch let error as NSError where error.domain == NSCocoaErrorDomain && error.code == NSFileNoSuchFileError { }
+        }
     }
 
     /// Validates a manifest path and folds directory spelling to the first

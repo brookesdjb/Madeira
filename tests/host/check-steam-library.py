@@ -676,7 +676,57 @@ func packageBuffer(apps: [UInt32], depots: [UInt32]) -> Data {
     return Data(pkg)
 }
 
+
+func storageChecks() throws {
+    let fm = FileManager.default
+    let base = fm.temporaryDirectory.appendingPathComponent("madeira-storage-" + UUID().uuidString)
+    try fm.createDirectory(at: base, withIntermediateDirectories: false)
+    defer { try? fm.removeItem(at: base) }
+    let external = base.appendingPathComponent("SSD")
+    try fm.createDirectory(at: external, withIntermediateDirectories: false)
+    let id = try SteamStorageIdentity.register(root: external)
+    let library = SteamStorageLibrary(id: id, name: "SSD", bookmark: nil)
+    try SteamStorageIdentity.verify(id, root: external)
+    require((try? SteamStorageIdentity.register(root: external)) == id, "storage: repeat registration preserves identity")
+    require((try? SteamStoragePath.windows("steamapps/common/Game", library: library)) == "E:\\steamapps\\common\\Game", "storage: external Windows mapping")
+    require((try? SteamStoragePath.windows("Games/Test", library: .internalLibrary)) == "C:\\Games\\Test", "storage: internal Windows mapping")
+    for bad in ["/abs", "../escape", "a/../escape", "C:\\escape", "a//b", "a/", "a\u{0}b"] {
+        require((try? SteamStoragePath.native(bad, root: external)) == nil, "storage: rejects invalid relative path")
+    }
+    let outside = base.appendingPathComponent("outside")
+    try fm.createDirectory(at: outside, withIntermediateDirectories: false)
+    try fm.createSymbolicLink(at: external.appendingPathComponent("escape"), withDestinationURL: outside)
+    require((try? SteamStoragePath.native("escape/payload", root: external)) == nil, "storage: rejects symlink escape")
+    let relocated = base.appendingPathComponent("SSD-reconnected")
+    try fm.moveItem(at: external, to: relocated)
+    try SteamStorageIdentity.verify(id, root: relocated)
+    require(true, "storage: identity survives changed mount path")
+    try fm.createDirectory(at: external, withIntermediateDirectories: false)
+    _ = try SteamStorageIdentity.register(root: external)
+    do { try SteamStorageIdentity.verify(id, root: external); require(false, "storage: replacement disk rejected") }
+    catch { require(true, "storage: replacement disk rejected") }
+
+    let apps = relocated.appendingPathComponent("steamapps")
+    try fm.createDirectory(at: apps, withIntermediateDirectories: false)
+    let record = apps.appendingPathComponent("appmanifest_55.acf")
+    try Data("install identity".utf8).write(to: record)
+    try fm.createSymbolicLink(at: apps.appendingPathComponent("common"), withDestinationURL: outside)
+    do { try SteamInstallFiles.delete(appID: 55, folderName: "Game", steamApps: apps); require(false, "storage: unsafe uninstall fails") }
+    catch { require(fm.fileExists(atPath: record.path), "storage: failed uninstall preserves primary record") }
+    try fm.removeItem(at: apps.appendingPathComponent("common"))
+    try Data("not a directory".utf8).write(to: apps.appendingPathComponent("common"))
+    do { try SteamInstallFiles.delete(appID: 55, folderName: "Game", steamApps: apps); require(false, "storage: filesystem deletion failure surfaces") }
+    catch { require(fm.fileExists(atPath: record.path), "storage: real deletion failure preserves primary record") }
+    do { try SteamInstallFiles.delete(appID: 55, folderName: "Game", steamApps: base.appendingPathComponent("missing")); require(false, "storage: missing library is not a successful uninstall") }
+    catch { require(true, "storage: missing library is not a successful uninstall") }
+    #if os(macOS)
+    let report = try SteamStorageProbe.run(root: relocated)
+    require(report.hasPrefix("PASS:"), "storage: production POSIX data probe")
+    #endif
+}
+
 @MainActor func units(_ fx: [String: Any]) async throws {
+    try storageChecks()
     // ---- protobuf: hostile input throws instead of trapping
     var big = ProtobufDecoder(Data([0x0a, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x01]))
     _ = try? big.readTag()
@@ -969,7 +1019,7 @@ func packageBuffer(apps: [UInt32], depots: [UInt32]) -> Data {
         require(ownedNow.buildID == 1001 && ownedNow.folderName == "Fixture Game", "the owned game carries the build")
     }
     if phase == "uninstall" {
-        SteamInstallFiles.delete(appID: 9000, folderName: "Fixture Game", steamApps: steamApps)
+        try SteamInstallFiles.delete(appID: 9000, folderName: "Fixture Game", steamApps: steamApps)
         require(MadeiraDock.games(drive: drive).isEmpty, "an uninstalled game is no longer found (its shared owner record went with it)")
         require(!FileManager.default.fileExists(atPath: steamApps.appendingPathComponent("common/Fixture Game").path), "its folder is gone")
         require(FileManager.default.fileExists(atPath: steamApps.appendingPathComponent("common").path) , "the common folder stays")
@@ -1057,7 +1107,8 @@ try:
                   steam / 'Core/SteamMessageCodec.swift', steam / 'Core/SteamCMSession.swift',
                   steam / 'Content/ContentDecryptor.swift', steam / 'Content/DepotManifest.swift',
                   steam / 'Library/SteamAppInfo.swift', steam / 'Library/SteamLibraryFetcher.swift',
-                  steam / 'Install/AppManifestWriter.swift', app / 'SteamInstall.swift', app / 'SteamKeyValues.swift']
+                  steam / 'Install/AppManifestWriter.swift', app / 'SteamInstall.swift', app / 'SteamStorage.swift', app / 'SteamKeyValues.swift']
+    if apple: production.append(app / 'SteamStorageProbe.swift')
     exe = work / 'check'
     build = subprocess.run([SWIFTC, '-parse-as-library', '-swift-version', '5', '-sanitize=address', '-g', '-o', str(exe),
                             '-I', str(shim / 'CommonCrypto'), '-I', str(shim / 'Compression'), '-I', str(shim / 'zlib'),
