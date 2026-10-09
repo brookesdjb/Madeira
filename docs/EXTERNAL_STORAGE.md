@@ -64,8 +64,9 @@ options is a separate borderless button/sheet instead of a NavigationLink that
 can capture the surrounding Form row. Check connection is also borderless.
 No storage routing, graphics or JIT behaviour changed in this UI increment.
 All 65 Swift sources compiled/linked and the source-v8 app signed successfully;
-build/provenance output is `/tmp/madeira-ssd-source-v8`. Installation is waiting
-for confirmation that the test app is closed, to avoid interrupting gameplay.
+build/provenance output is `/tmp/madeira-ssd-source-v8`. After the user confirmed
+the test app was closed, installation succeeded. It was left closed for a focused
+disconnected-button, separate-storage-options and reconnect UI check.
 
 The first Brotato SSD install attempt in source-v2 stopped at the capacity gate:
 the user reported 0.2 GB required and 0.0 GB available. A read-only inspection of
