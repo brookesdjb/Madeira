@@ -133,7 +133,19 @@ their own build and validation route. Do not describe this as a full source buil
 
 On 2026-10-09 all 64 checkout Swift sources compiled and linked through this
 route; the signed app installed over the disposable SSD probe and its
-`MadeiraSSDSource` process remained running after foreground launch. Visual
-acceptance, Steam sign-in and gameplay with this interface are pending. The
+`MadeiraSSDSource` process remained running after foreground launch. The user
+confirmed the interface opens. Steam download and gameplay checks are pending. The
 working `com.brookes.madeira` installation was not replaced or read. Brotato
 exists only in that working app; use a fresh install for the future SSD test.
+
+The integrated diagnostic build sets `MadeiraUsesPrebuiltNativeBridge` in its
+Info.plist. That makes direct launches pass a registered C: alias as their
+working directory and SteamAppPath, compensating for the pinned binary's old
+C:-only bridge. The executable and Dock expected-install path remain E:. The
+native source has an E: resolver, but this build does not compile that native
+file. External direct 32-bit launches are explicitly refused in this diagnostic
+build. The reference-counted production access lease, picker, selected-library
+downloader and registry are compiled from source; the fixture overlay is absent
+in source mode. Use Settings → Game storage to register the SSD, and choose its
+folder in the game's Download to picker. Never infer destination from this app's
+name alone.

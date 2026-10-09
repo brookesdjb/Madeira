@@ -24,8 +24,55 @@ enum SteamInstallPaths {
 
     /// Whether an install (its drive-relative library folder) is in the library
     /// Madeira downloads into, and so can be updated or removed here.
-    static func isManaged(library: String) -> Bool {
-        library.caseInsensitiveCompare(libraryRelative) == .orderedSame
+    static func isManaged(library: String, storageID: String = "internal") -> Bool {
+        library.caseInsensitiveCompare(storageID == "internal" ? libraryRelative : "steamapps") == .orderedSame
+    }
+}
+
+/// Register the one external root with Valve's client while no Wine session is
+/// running. Preserve existing libraries and unknown fields; refuse malformed
+/// metadata instead of replacing it with an empty document.
+enum SteamLibraryFolders {
+    static func register(externalID: String, name: String, apps: [Int: Int64], drive: URL) throws {
+        guard UUID(uuidString: externalID) != nil else { throw SteamStorageError.invalidRecord }
+        let file = try SteamStoragePath.native(SteamInstallPaths.libraryRelative + "/libraryfolders.vdf", root: drive)
+        var root: [String: SteamValue] = [:]
+        do {
+            let data = try Data(contentsOf: file)
+            var parser = try SteamKeyValues(data)
+            root = try parser.read().fields
+            guard root["libraryfolders"] != nil else { throw SteamStorageError.invalidRecord }
+        } catch let error as NSError where error.domain == NSCocoaErrorDomain && error.code == NSFileReadNoSuchFileError { }
+        var folders = root["libraryfolders"]?.fields ?? [:]
+        if folders.isEmpty {
+            folders["0"] = .object(["path": .text("C:\\Program Files (x86)\\Steam"), "apps": .object([:])])
+        }
+        let owned = folders.first { $0.value["madeira_library_id"]?.string == externalID }?.key
+        let existingE = folders.first { $0.value["path"]?.string?.trimmingCharacters(in: CharacterSet(charactersIn: "\\/")).lowercased() == "e:" }?.key
+        if let existingE, owned != existingE, folders[existingE]?["madeira_library_id"]?.string != nil {
+            throw SteamStorageError.unavailable(.identityMismatch)
+        }
+        let key = owned ?? existingE ?? String((folders.keys.compactMap(Int.init).max() ?? 0) + 1)
+        var entry = folders[key]?.fields ?? [:]
+        entry["path"] = .text("E:\\")
+        entry["label"] = .text(name)
+        entry["madeira_library_id"] = .text(externalID)
+        entry["apps"] = .object(Dictionary(uniqueKeysWithValues: apps.map { (String($0.key), .text(String(max(0, $0.value)))) }))
+        folders[key] = .object(entry)
+        root["libraryfolders"] = .object(folders)
+        func quote(_ text: String) -> String {
+            "\"" + text.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "\"", with: "\\\"") + "\""
+        }
+        func encode(_ fields: [String: SteamValue], indent: String = "") -> String {
+            fields.keys.sorted().map { key in
+                switch fields[key]! {
+                case .text(let value): return indent + quote(key) + "\t" + quote(value) + "\n"
+                case .object(let nested): return indent + quote(key) + "\n" + indent + "{\n" + encode(nested, indent: indent + "\t") + indent + "}\n"
+                }
+            }.joined()
+        }
+        try FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data(encode(root).utf8).write(to: file, options: .atomic)
     }
 }
 

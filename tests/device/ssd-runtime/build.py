@@ -97,7 +97,8 @@ for target, signed, name in [(app, stub, 'App'), (app / 'PlugIns/MadeiraJITHelpe
     if name == 'App':
         info.update(CFBundleExecutable='MadeiraSSDSource' if frontend == 'source' else 'MadeiraSSDWrapper',
                     CFBundleDisplayName='Madeira SSD Library' if frontend == 'source' else 'Madeira SSD Runtime',
-                    MadeiraBuild='SSD source frontend / prebuilt native runtime' if frontend == 'source' else 'SSD runtime binary-reuse experiment')
+                    MadeiraBuild='SSD source frontend / prebuilt native runtime' if frontend == 'source' else 'SSD runtime binary-reuse experiment',
+                    MadeiraUsesPrebuiltNativeBridge=(frontend == 'source'))
     (target / 'Info.plist').write_bytes(plistlib.dumps(info))
     shutil.copy2(signed / 'embedded.mobileprovision', target / 'embedded.mobileprovision')
     entitlement = subprocess.run(['codesign', '-d', '--entitlements', ':-', str(signed)], capture_output=True, check=True).stdout

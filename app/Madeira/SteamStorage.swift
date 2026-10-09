@@ -58,6 +58,9 @@ struct SteamStorageAssignment: Codable, Equatable, Sendable {
     var installed: Bool
     var buildID: Int?
     var bytes: Int64?
+    /// Optional for catalogs written before queue-state persistence. A paused
+    /// update remains pending even though its old install record still exists.
+    var pending: Bool?
 }
 
 /// Metadata stays internal so unavailable games and partial downloads remain
@@ -88,7 +91,9 @@ struct SteamStorageCatalog: Codable, Equatable {
         if let existing = assignments[assignment.appID], existing.location != assignment.location {
             throw SteamStorageError.invalidRecord
         }
-        assignments[assignment.appID] = assignment
+        var next = assignment
+        if next.pending == nil { next.pending = assignments[assignment.appID]?.pending }
+        assignments[assignment.appID] = next
     }
 
     /// Only call after successful payload/record deletion under live access.
@@ -271,6 +276,47 @@ final class SteamStorageAsyncWork<Value: Sendable>: @unchecked Sendable {
 }
 
 #if os(iOS) || os(macOS)
+/// Shared operation/session access. The coordinator's worker retains only the
+/// completion semaphore; the last client releases access when its lease dies.
+final class SteamExternalLease: @unchecked Sendable {
+    let root: URL
+    let library: SteamStorageLibrary
+    let writable: Bool
+    private let finished: DispatchSemaphore
+    private init(root: URL, library: SteamStorageLibrary, writable: Bool, finished: DispatchSemaphore) {
+        self.root = root; self.library = library; self.writable = writable; self.finished = finished
+    }
+    deinit { finished.signal() }
+    /// Use in defer to keep the lease alive across every await and final handle close.
+    func keepAlive() {}
+    func validate() throws { try SteamStorageIdentity.verify(library.id, root: root) }
+
+    static func open(_ library: SteamStorageLibrary) async throws -> SteamExternalLease {
+        try Task.checkCancellation()
+        return try await withCheckedThrowingContinuation { continuation in
+            DispatchQueue.global(qos: .utility).async {
+                var delivered = false
+                func enter(write: Bool) throws {
+                    _ = try SteamExternalAccess.withLibrary(library, write: write) { root in
+                        var updated = library
+                        updated.bookmark = try root.bookmarkData(options: .minimalBookmark, includingResourceValuesForKeys: nil, relativeTo: nil)
+                        let finished = DispatchSemaphore(value: 0)
+                        delivered = true
+                        continuation.resume(returning: SteamExternalLease(root: root, library: updated, writable: write, finished: finished))
+                        finished.wait()
+                    }
+                }
+                do {
+                    do { try enter(write: true) }
+                    catch where !delivered && SteamExternalAccess.availability(for: error) == .readOnly { try enter(write: false) }
+                } catch {
+                    if !delivered { continuation.resume(throwing: error) }
+                }
+            }
+        }
+    }
+}
+
 /// One balanced scope and a coordinated accessor cover the *whole* synchronous
 /// operation, including all POSIX handles and mappings. Run on a worker queue.
 /// Never return an open handle, mmap pointer or task from this accessor.
@@ -301,6 +347,9 @@ enum SteamExternalAccess {
             throw SteamStorageError.unavailable(.permissionDenied)
         }
         defer { url.stopAccessingSecurityScopedResource() }
+        if write, try url.resourceValues(forKeys: [.volumeIsReadOnlyKey]).volumeIsReadOnly == true {
+            throw SteamStorageError.unavailable(.readOnly)
+        }
         var coordinationError: NSError?
         var outcome: Result<T, Error>?
         let coordinator = NSFileCoordinator()

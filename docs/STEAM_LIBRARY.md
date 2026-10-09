@@ -422,12 +422,28 @@ Madeira Dock or as The game).
 - Games installed by Valve's client in another library folder are listed and
   played but not updated or removed here.
 
-## External SSD work in progress
+## External SSD libraries
 
-The external-storage increment and its precise device/build evidence are in
-[EXTERNAL_STORAGE.md](EXTERNAL_STORAGE.md). The SSD folder-access prototype has
-passed data operations and bookmark reconnect tests on an iPad. External Steam
-installs and launches are not enabled yet; the existing library stays internal.
-Uninstall now waits for a running download and retains the library entry if
-filesystem deletion fails. A failure may leave partial payload removal, so
-reconnect the storage and retry or repair instead of treating it as success.
+Settings → Game storage registers one dedicated local SSD folder using an
+in-place picker. New installs explicitly choose iPad or that folder in Download
+to. Existing and partial installations keep their library through resume, update
+and repair. External payloads, journals, caches and manifests stay under the
+selected root's `steamapps`; Steam's client and the Wine prefix remain internal.
+
+Library records store a stable library ID and relative path. Missing IDs in old
+entries mean internal storage. A bookmark and identity marker recover the same
+external library after reconnect; an unrelated folder at the old mount path is
+refused. Disconnected games retain their settings and show Connect SSD.
+
+Uninstall waits for the downloader and removes library metadata only after file
+deletion succeeds. A failure can leave partial payload removal: reconnect and
+retry or repair. Uninstall also deletes saves stored beside game files. Cloud
+GameInstall roots use the selected library; unavailable storage stops comparison
+and transfer before missing files can be acknowledged as deletions.
+
+See [EXTERNAL_STORAGE.md](EXTERNAL_STORAGE.md) for exact build/provenance and
+validation. The source integration is installed in an isolated diagnostic app;
+controlled external execution and host integration pass, but Steam download,
+Brotato gameplay and the physical failure matrix are still pending. The mixed
+build uses a prebuilt native runtime and a C: compatibility alias for the direct
+launch working directory; it is not a full native source build.

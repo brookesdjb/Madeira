@@ -78,7 +78,7 @@ require('SteamEntrySection(entry: $entry)' in detail and 'if entry.steamAppID !=
         'Game details: the Steam section for a Steam game')
 for label in ['"Start with"', '"Madeira Dock"', '"Smaller JIT pool (512 MB) for this launch"', '"One-time installs"',
               '"Run at next start"', '"Skip"', '"Repair installed files"', '"Uninstall"', '"App ID"',
-              '"Free space on this device"', '"Pause update"', '"Resume update"', '"The game"', '"Program"', '"Choose…"']:
+              '"Free space in game library"', '"Pause update"', '"Resume update"', '"The game"', '"Program"', '"Choose…"']:
     require(label in steam_section, f'Steam section: {label}')
 for label in ['"Library details"', '"Choose cover image"', '"Use Steam artwork"', '"Display"', '"Resolution"',
               '"Aspect & scaling"', '"Compatibility & performance"', '"Reduced-precision x87"', '"CPU cores reported"',
@@ -109,7 +109,7 @@ require('await library.refreshSteamMetadata(game, title: item.name)' in cell and
 steam_meta = library[library.index('    func refreshSteamMetadata('):]
 steam_meta = steam_meta[:steam_meta.index('\n    }\n')]
 require(steam_meta.index('SteamInstallFiles.buildID(') <
-        steam_meta.index('let install = "\\(folder)#\\(record.build ?? 0)#\\(picked ?? "")#\\(known ? 1 : 0)"') <
+        steam_meta.index('let install = "\\(game.storageID)#\\(folder)#\\(record.build ?? 0)#\\(picked ?? "")#\\(known ? 1 : 0)"') <
         steam_meta.index('stored.steamMetadataInstall == install') < steam_meta.index('launchOptions(appID: game.id)'),
         "the format is read again only for another install folder, build or picked program, once Steam's launch "
         "configuration is cached, or a day later while no program is known")
@@ -118,7 +118,7 @@ require('\\(steam.game(item.id)?.launches != nil)' in cell,
 require('stored?.steamProgramSource == "choice" ? stored?.steamProgram : nil' in steam_meta and
         'let options = kept == nil ? await SteamOwnedLibrary.shared.launchOptions(appID: game.id) : nil' in steam_meta and
         'SteamDirectStart.program(picked: kept, options: options, installFolder: root)' in steam_meta and
-        'LibraryModel.inspect(root.appendingPathComponent(path))' in steam_meta and
+        'LibraryModel.inspect(root.appendingPathComponent(path), root: drive)' in steam_meta and
         'LibraryMetadataScanner.shared.scan(program.url, drive: drive, countBytes: false)' in steam_meta,
         'the program is the one "The game" starts; bits from its PE header, the API as for any library game')
 require(steam_meta.count('Task.detached(priority: .utility)') == 3 and 'updated.folderBytes = record.size ?? updated.folderBytes' in steam_meta
@@ -138,7 +138,7 @@ require('if let appID = entry.steamAppID, !entry.startsSteamGameDirectly {' in l
 # Program picker starts like any library game, without Dock, a sign-in transfer or a client.
 direct = launch[launch.index('if let appID = entry.steamAppID, !entry.startsSteamGameDirectly {'):]
 require(direct.index('startDock(') < direct.index('guard entry.steamProgram?.isEmpty == false else {') <
-        direct.index('LibraryModel.executable(entry.launchRelativePath)') < direct.index('entry.configureLaunch()') <
+        direct.index('LibraryModel.executable(entry.launchRelativePath, root: storageRoot)') < direct.index('entry.configureLaunch()') <
         direct.index('runWineFullSequence(profile: entry)'),
         '"The game": no program chosen, no start; otherwise the program is checked inside drive_c and started as a library game')
 require('writeHandoff' not in direct[direct.index('guard entry.steamProgram'):] and 'credentialsForDock' not in launch,
@@ -471,7 +471,7 @@ with tempfile.TemporaryDirectory(prefix='madeira-steam-games-') as tmp:
     build = subprocess.run([SWIFTC, '-parse-as-library', '-swift-version', '5', '-sanitize=address', '-o', str(exe),
                             str(tmp / 'stubs.swift'), str(tmp / 'dock.swift'), str(tmp / 'rules.swift'),
                             str(tmp / 'checks.swift'), str(tmp / 'owned.swift'), str(app / 'SteamKeyValues.swift'),
-                            str(app / 'SteamInstall.swift'), str(app / 'SwiftSteam/Library/SteamAppInfo.swift')],
+                            str(app / 'SteamInstall.swift'), str(app / 'SteamStorage.swift'), str(app / 'SwiftSteam/Library/SteamAppInfo.swift')],
                            capture_output=True, text=True)
     require(build.returncode == 0, 'production Steam games rules and Dock discovery compile on the host')
     if build.returncode:

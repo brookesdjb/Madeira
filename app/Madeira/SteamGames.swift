@@ -28,7 +28,7 @@ enum SteamGamesRules {
 
     /// What a game's card says about it.
     enum Status: Equatable {
-        case notInstalled, partlyInstalled, installed, updateAvailable
+        case notInstalled, partlyInstalled, installed, updateAvailable, driveRequired
         case queued, downloading(Int), paused, failed
 
         /// The card's state pill, or nil for an installed game: its card shows only
@@ -36,6 +36,7 @@ enum SteamGamesRules {
         /// size), and a newer build adds "Update" to them.
         var badge: String? {
             switch self {
+            case .driveRequired: return "Connect SSD"
             case .notInstalled: return "Not installed"
             case .partlyInstalled: return "Not fully installed"
             case .installed: return nil
@@ -64,6 +65,7 @@ enum SteamGamesRules {
             }
         }
         guard let installed else { return .notInstalled }
+        if !installed.storageAvailable { return .driveRequired }
         if !installed.installed { return .partlyInstalled }
         return updateAvailable ? .updateAvailable : .installed
     }
@@ -379,12 +381,15 @@ enum SteamDirectStart {
                     builds[game.id] = build
                 }
             }
+            let external = await SteamStorageModel.shared.externalGames()
+            let combined = found + external.games.filter { candidate in !found.contains { $0.id == candidate.id } }
+            for (id, build) in external.builds where !found.contains(where: { $0.id == id }) { builds[id] = build }
             let recorded = builds
             await MainActor.run {
                 self.scanning = false
                 let again = self.rescan
                 self.rescan = false
-                if self.games != found { self.games = found }
+                if self.games != combined { self.games = combined }
                 if self.builds != recorded { self.builds = recorded }
                 if found.count != self.lastCount {
                     self.lastCount = found.count
@@ -863,6 +868,9 @@ struct SteamGameSheet: View {
     @State private var freeSpace: Int64?
     @State private var partial = false
     @State private var confirmCancel = false
+    @ObservedObject private var storage = SteamStorageModel.shared
+    @State private var chosenLibrary = SteamStorageLibrary.internalID
+    private var destinationID: String { storage.catalog.assignments[appID]?.location.libraryID ?? (partial ? SteamStorageLibrary.internalID : chosenLibrary) }
 
     var body: some View {
         let owned = SteamOwnedLibrary.enabled ? steam.owned : []
@@ -888,6 +896,20 @@ struct SteamGameSheet: View {
                                     .clipped()
                             )
                     }
+                    Section("Install location") {
+                        if storage.catalog.assignments[appID] != nil || partial {
+                            LabeledContent("Library", value: (try? storage.library(destinationID).name) ?? "Unavailable library")
+                            Text("Resume, update and repair use this same library.").font(.footnote).foregroundStyle(.secondary)
+                        } else {
+                            Picker("Download to", selection: $chosenLibrary) {
+                                ForEach(storage.libraries) { library in Text(library.name).tag(library.id) }
+                            }
+                        }
+                        NavigationLink("Manage game storage") { SteamStorageSettings() }
+                        if destinationID != SteamStorageLibrary.internalID, let problem = storage.problem {
+                            Text(problem).font(.footnote).foregroundStyle(.secondary)
+                        }
+                    }
                     if let download = steam.downloads[appID] {
                         Section("Download") {
                             SteamDownloadStatus(download: download)
@@ -899,7 +921,7 @@ struct SteamGameSheet: View {
                         }
                     }
                     Section {
-                        if let freeSpace { LabeledContent("Free space on this device", value: formatBytes(freeSpace)) }
+                        if let freeSpace { LabeledContent("Free space in selected library", value: formatBytes(freeSpace)) }
                         Text(SteamGameSheet.downloadNote)
                             .font(.footnote).foregroundStyle(.secondary)
                     }
@@ -915,21 +937,22 @@ struct SteamGameSheet: View {
             }
             .navigationTitle("Steam").navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
-            .task(id: steam.downloads[appID]?.state) {
+            .task(id: destinationID + String(describing: steam.downloads[appID]?.state)) {
                 partial = steam.hasPartialDownload(appID)
-                let values = try? URL.documentsDirectory.resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey])
-                freeSpace = values?.volumeAvailableCapacityForImportantUsage
+                freeSpace = try? await storage.perform(libraryID: destinationID, write: false) { root in
+                    try root.resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey]).volumeAvailableCapacityForImportantUsage
+                }
             }
             .confirmationDialog("Cancel this download? Downloaded files are deleted.", isPresented: $confirmCancel, titleVisibility: .visible) {
                 Button("Cancel download", role: .destructive) {
-                    steam.cancelInstall(appID, installed: games.games.contains { $0.id == appID })
+                    steam.cancelInstall(appID, installed: games.games.contains { $0.id == appID && $0.installed })
                 }
                 Button("Keep downloading", role: .cancel) {}
             }
         }
     }
 
-    static let downloadNote = "Games download directly from Steam with your account into C:\\Program Files (x86)\\Steam\\steamapps\\common. You can leave Madeira while it downloads: on iOS 26 and later iOS shows the download's progress and keeps it going; on earlier versions it pauses after a short while and continues when you return. A download pauses while a game is running and continues afterwards."
+    static let downloadNote = "Games download directly from Steam with your account into the selected library. SSD game files and download progress stay on that SSD; Windows and Steam client files remain on the iPad. You can leave Madeira while it downloads: on iOS 26 and later iOS shows the download's progress and keeps it going; on earlier versions it pauses after a short while and continues when you return. A download pauses while a game is running and continues afterwards."
 
     @ViewBuilder private func primaryAction(_ item: SteamGamesRules.Item) -> some View {
         if let installed = item.installed {
@@ -946,14 +969,14 @@ struct SteamGameSheet: View {
                 Button { steam.pause(appID) } label: { steamActionLabel("Pause", symbol: "pause.fill") }
                     .buttonStyle(.bordered)
             case .paused:
-                Button { steam.install(appID) } label: { steamActionLabel("Resume", symbol: "arrow.down.circle.fill") }
+                Button { steam.install(appID, libraryID: destinationID) } label: { steamActionLabel("Resume", symbol: "arrow.down.circle.fill") }
                     .buttonStyle(.borderedProminent)
             case .failed:
-                Button { steam.install(appID) } label: { steamActionLabel("Try again", symbol: "arrow.clockwise") }
+                Button { steam.install(appID, libraryID: destinationID) } label: { steamActionLabel("Try again", symbol: "arrow.clockwise") }
                     .buttonStyle(.borderedProminent)
             }
         } else if item.owned != nil {
-            Button { steam.install(appID) } label: {
+            Button { steam.install(appID, libraryID: destinationID) } label: {
                 steamActionLabel(partial ? "Resume download" : "Install", symbol: "arrow.down.circle.fill")
             }.buttonStyle(.borderedProminent).disabled(!steam.signedIn)
         }
@@ -1176,7 +1199,7 @@ struct SteamEntrySection: View {
         let installed = games.games.first { $0.id == appID }
         let download = steam.downloads[appID]
         // Madeira manages (updates, repairs, removes) only what it downloaded into Dock's own library folder.
-        let managed = installed.map { SteamInstallPaths.isManaged(library: $0.library) } ?? false
+        let managed = installed.map { SteamInstallPaths.isManaged(library: $0.library, storageID: $0.storageID) } ?? false
         let downloads = SteamOwnedLibrary.enabled && managed
         let direct = entry.startsSteamGameDirectly
         Section {
@@ -1236,7 +1259,7 @@ struct SteamEntrySection: View {
                     .font(.caption).foregroundStyle(.secondary)
             }
             LabeledContent("App ID", value: String(appID))
-            if let freeSpace { LabeledContent("Free space on this device", value: formatBytes(freeSpace)) }
+            if let freeSpace { LabeledContent("Free space in game library", value: formatBytes(freeSpace)) }
             if let status = dock.status {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Last Dock result").font(.caption).foregroundStyle(.secondary)
@@ -1257,11 +1280,12 @@ struct SteamEntrySection: View {
         }
         .onAppear { dock.refresh(); games.refresh() }
         .task(id: download?.state) {
-            let values = try? URL.documentsDirectory.resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey])
-            freeSpace = values?.volumeAvailableCapacityForImportantUsage
+            freeSpace = try? await SteamStorageModel.shared.perform(libraryID: entry.storageID, write: false) { root in
+                try root.resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey]).volumeAvailableCapacityForImportantUsage
+            }
         }
         .task(id: "\(entry.steamStart ?? "dock") \(installed?.installed == true) \(download == nil)") { await resolveProgram() }
-        .confirmationDialog("Uninstall \(entry.title)? Its downloaded files are deleted from this device. Saves stored elsewhere are kept.",
+        .confirmationDialog("Uninstall \(entry.title)? Its downloaded files and saves beside them are deleted from this library. Saves stored elsewhere are kept.",
                             isPresented: $confirmUninstall, titleVisibility: .visible) {
             Button("Uninstall", role: .destructive) {
                 if let installed { steam.uninstall(installed) }
@@ -1299,7 +1323,11 @@ struct SteamEntrySection: View {
     /// failing that, the only program when there is exactly one.
     private func resolveProgram() async {
         guard entry.startsSteamGameDirectly, let appID = entry.steamAppID else { return }
-        let folder = LibraryModel.drive.appendingPathComponent(entry.relativePath, isDirectory: true)
+        let access: SteamExternalLease?
+        do { access = try await SteamStorageModel.shared.accessForOperation(libraryID: entry.storageID, write: false) }
+        catch { return }
+        defer { access?.keepAlive() }
+        guard let folder = try? SteamStoragePath.native(entry.relativePath, root: access?.root ?? LibraryModel.drive) else { return }
         let found = await Task.detached(priority: .userInitiated) { SteamDirectStart.programs(in: folder) }.value
         programs = found
         if entry.steamProgramSource == "choice", let program = entry.steamProgram, found.contains(program) { return }

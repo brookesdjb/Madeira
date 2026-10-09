@@ -719,9 +719,48 @@ func storageChecks() throws {
         try catalog.transaction(file: badSave.appendingPathComponent("catalog.json")) { $0.remove(appID: 55) }
         require(false, "storage: failed persistence rolls back in-memory mutation")
     } catch { require(catalog == initialCatalog, "storage: failed persistence rolls back in-memory mutation") }
+    var updating = initialCatalog
+    let updatingFile = base.appendingPathComponent("updating.json")
+    var update = assignment
+    update.installed = true; update.pending = true
+    try updating.transaction(file: updatingFile) { try $0.assign(update) }
+    // Discovery may still see the old complete manifest during a paused update.
+    var scanned = update; scanned.pending = nil
+    try updating.transaction(file: updatingFile) { try $0.assign(scanned) }
+    require((try? SteamStorageCatalog.load(from: updatingFile))?.assignments[55]?.pending == true,
+            "storage: paused update survives restart and old-manifest discovery")
+    update.pending = false
+    try updating.transaction(file: updatingFile) { try $0.assign(update) }
+    require(updating.assignments[55]?.pending == false, "storage: successful completion explicitly clears pending state")
     try Data("broken".utf8).write(to: catalogURL)
     require((try? SteamStorageCatalog.load(from: catalogURL)) == nil, "storage: corrupt catalog never resets into an internal fallback")
     try JSONEncoder().encode(catalog).write(to: catalogURL)
+    let internalDrive = base.appendingPathComponent("drive_c")
+    let foldersFile = SteamInstallPaths.steamApps(drive: internalDrive).appendingPathComponent("libraryfolders.vdf")
+    try fm.createDirectory(at: foldersFile.deletingLastPathComponent(), withIntermediateDirectories: true)
+    try Data(#"""
+    "libraryfolders" {
+        "0" { "path" "C:\\Program Files (x86)\\Steam" "apps" { "1" "42" } }
+        "1" { "path" "C:\\Other Games" "custom" "keep" }
+    }
+    "unknown" "preserved"
+    """#.utf8).write(to: foldersFile)
+    try SteamLibraryFolders.register(externalID: id, name: "SSD", apps: [55: 1234], drive: internalDrive)
+    try SteamLibraryFolders.register(externalID: id, name: "SSD", apps: [55: 5678], drive: internalDrive)
+    var foldersParser = try SteamKeyValues(Data(contentsOf: foldersFile))
+    let foldersRecord = try foldersParser.read()
+    require(foldersRecord["libraryfolders"]?.fields.count == 3 && foldersRecord["unknown"]?.string == "preserved" &&
+            foldersRecord["libraryfolders"]?["1"]?["custom"]?.string == "keep",
+            "storage: Steam registration preserves other libraries and unknown fields")
+    require(foldersRecord["libraryfolders"]?["2"]?["path"]?.string == "E:\\" &&
+            foldersRecord["libraryfolders"]?["2"]?["apps"]?["55"]?.string == "5678",
+            "storage: Steam registration updates one stable E library entry")
+    let broken = Data("broken".utf8)
+    try broken.write(to: foldersFile)
+    do {
+        try SteamLibraryFolders.register(externalID: id, name: "SSD", apps: [:], drive: internalDrive)
+        require(false, "storage: malformed Steam registration is not overwritten")
+    } catch { require((try? Data(contentsOf: foldersFile)) == broken, "storage: malformed Steam registration is not overwritten") }
     for bad in ["/abs", "../escape", "a/../escape", "C:\\escape", "a//b", "a/", "a\u{0}b"] {
         require((try? SteamStoragePath.native(bad, root: external)) == nil, "storage: rejects invalid relative path")
     }
@@ -1023,7 +1062,14 @@ func storageAsyncChecks() async throws {
 @MainActor func install(_ fx: [String: Any], phase: String) async throws {
     let tmp = URL(fileURLWithPath: fx["tmp"] as! String)
     let drive = tmp.appendingPathComponent("drive_c")
-    let steamApps = SteamInstallPaths.steamApps(drive: drive)
+    let externalRoot = tmp.appendingPathComponent("external")
+    let external = fx["storage"] as? String == "external"
+    var storage = SteamStorageLibrary.internalLibrary
+    if external {
+        try FileManager.default.createDirectory(at: externalRoot, withIntermediateDirectories: true)
+        storage = SteamStorageLibrary(id: try SteamStorageIdentity.register(root: externalRoot), name: "SSD", bookmark: nil)
+    }
+    let steamApps = external ? externalRoot.appendingPathComponent("steamapps") : SteamInstallPaths.steamApps(drive: drive)
     let hosts = fx["hosts"] as! [String]
     let session = ScriptedSession()
     session.keys = [9001: hexData(fx["key"] as! String), 9003: hexData(fx["keyShared"] as! String)]
@@ -1069,7 +1115,7 @@ func storageAsyncChecks() async throws {
         if phase == "symlink" { require(error is SteamStorageError, "download rejects a symlink out of the selected library") }
         if phase == "refused-licensed" { require(error as? SteamError == .depotKeyNotFound(9004), "a refusal for a depot the account is licensed for fails the install") }
     }
-    let found = MadeiraDock.games(drive: drive)
+    let found = try external ? MadeiraDock.games(library: storage, root: externalRoot) : MadeiraDock.games(drive: drive)
     print("RESULT listed=\(found.filter { $0.id == 9000 && $0.installed }.count)")
     if !["interrupt", "refused-licensed", "symlink"].contains(phase) {
         require(lastProgress.phase == .finishing && lastProgress.doneBytes == lastProgress.totalBytes && lastProgress.totalBytes > 0, "progress ends complete: \(lastProgress.doneBytes)/\(lastProgress.totalBytes)")
@@ -1079,10 +1125,11 @@ func storageAsyncChecks() async throws {
         require(session.authRequests.contains { $0.depot == 9003 && $0.app == 9100 && $0.host == "127.0.0.1" }, "content authorization names the bare host name")
         require(!session.keyRequests.contains { $0.depot == 9002 }, "a depot for another language is never asked for")
         guard let game = found.first(where: { $0.id == 9000 }) else { require(false, "Madeira Dock's discovery finds the downloaded game"); return }
-        require(game.installed && game.installDir == "Fixture Game" && game.library == "Program Files (x86)/Steam/steamapps" && game.name == "Fixture Game",
+        require(game.installed && game.installDir == "Fixture Game" && game.library == (external ? "steamapps" : "Program Files (x86)/Steam/steamapps") && game.name == "Fixture Game",
                 "Madeira Dock's discovery finds the downloaded game as fully installed")
+        require(game.storageID == storage.id && game.windowsInstallPath.hasPrefix(external ? "E:\\" : "C:\\"), "discovered game retains its library and Windows drive")
         require(game.customExecutables, "the record lists the per-user executables Valve's client prepares (CheckGuid)")
-        require(SteamInstallPaths.isManaged(library: game.library), "it is in the library Madeira manages")
+        require(SteamInstallPaths.isManaged(library: game.library, storageID: game.storageID), "it is in the library Madeira manages")
         do { try MadeiraDock.validate(game, drive: drive, bundled: true) ; require(false, "validate needs the client files") }
         catch { require(error.localizedDescription.contains("client"), "Dock's launch check passes the record and stops at the missing client files only") }
         require(SteamInstallFiles.buildID(appID: 9000, steamApps: steamApps) == build, "the record's build id")
@@ -1099,7 +1146,8 @@ func storageAsyncChecks() async throws {
     }
     if phase == "uninstall" {
         try SteamInstallFiles.delete(appID: 9000, folderName: "Fixture Game", steamApps: steamApps)
-        require(MadeiraDock.games(drive: drive).isEmpty, "an uninstalled game is no longer found (its shared owner record went with it)")
+        let remaining = try external ? MadeiraDock.games(library: storage, root: externalRoot) : MadeiraDock.games(drive: drive)
+        require(remaining.isEmpty, "an uninstalled game is no longer found (its shared owner record went with it)")
         require(!FileManager.default.fileExists(atPath: steamApps.appendingPathComponent("common/Fixture Game").path), "its folder is gone")
         require(FileManager.default.fileExists(atPath: steamApps.appendingPathComponent("common").path) , "the common folder stays")
     }
@@ -1353,6 +1401,23 @@ try:
     require(result.get('install') == 'failed' and not state.chunk_requests and
             not list((work / 'symlink-root/outside').iterdir()),
             'a preexisting common symlink cannot redirect a download outside the library')
+    # The same production downloader/scanner/deletion code at an external root.
+    external_fixture = dict(fixture, storage='external', tmp=str(work / 'external-root'))
+    state.reset_counters()
+    result = run('resume', external_fixture)
+    external_apps = work / 'external-root/external/steamapps'
+    require(result.get('install') == 'ok' and result.get('listed') == '1' and
+            (external_apps / 'appmanifest_9000.acf').is_file() and
+            (external_apps / f'depotcache/9001_{gid1}.manifest').is_file() and
+            not (work / 'external-root/drive_c').exists(),
+            'external payloads, records and depot cache stay external with no internal game staging')
+    state.reset_counters()
+    result = run('update', external_fixture)
+    require(result.get('install') == 'ok' and set(state.chunk_requests) == {new_sha},
+            'external update reuses unchanged chunks')
+    run('uninstall', external_fixture)
+    require(not list(external_apps.glob('appmanifest_*.acf')) and not (external_apps / 'common/Fixture Game').exists(),
+            'external uninstall removes payload and records from the selected library')
 finally:
     for server in servers:
         server.shutdown(); server.server_close()

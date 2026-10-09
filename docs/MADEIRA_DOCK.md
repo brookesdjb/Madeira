@@ -482,11 +482,18 @@ credentials:
   process, frames and swapchains, capacity, the born-minimized restore and its
   switch), the driver's path form, and the wiring and glyph row.
 
-## External-storage feasibility work
+## External storage
 
 The current pinned source is `72558e416a390f3669457930f09a389e54f49556`.
-Its `src/launch.c` validates the actual normalized install path against the
-host's expected path without restricting the drive letter to C:. This is only
-a source-contract observation; Steam registration, Wine mapping, and external
-EXE/DLL loading remain unverified. See [EXTERNAL_STORAGE.md](EXTERNAL_STORAGE.md).
-The Swift scanner still discovers internal C: libraries only.
+Its `src/launch.c` validates the normalized actual install path against the host's
+expected path without restricting the drive letter to C:. External games use
+`E:\steamapps\common\<folder>`. The app validates the saved folder identity,
+retains coordinated scoped access through the session, registers E: in Steam's
+libraryfolders metadata and passes that E: install path to Dock. Installer lookup
+uses the same external root; the registry and generated installer scripts remain
+internal. Disconnected records are retained and require access before launch.
+
+The controlled Windows EXE/DLL/relative-asset/save fixture passed on iPad. Dock
+with an actual SSD game, Valve's registration behavior and one-time installer
+execution still need physical validation. See [EXTERNAL_STORAGE.md](EXTERNAL_STORAGE.md)
+for the mixed-source build's native-bridge limitations and validation ledger.

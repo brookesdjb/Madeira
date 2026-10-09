@@ -98,3 +98,15 @@ missing inputs and a reproducible independently signed SSD data-access probe.
 `python3 tests/host/typecheck-ios.py` validates all production Swift sources
 without pretending to link the absent runtime. The Steam download host harness
 now supports both macOS native libraries and the existing Linux shims.
+
+The pinned llvm-mingw toolchain is now available for the controlled Windows
+fixture. Other native inputs are still absent. A reproducible mixed-source route
+is documented in [tests/device/ssd-runtime/README.md](../tests/device/ssd-runtime/README.md):
+`FRONTEND=source` compiles the checkout's 65 Swift sources against the hash-pinned
+published runtime. Three hidden native entry points forward to verified original
+implementations; no runtime instructions are changed. Source hashes, native input
+hashes and output hashes are recorded. This route compiled, signed, installed in
+the isolated SSD app, and opened its interface on iPad. Native bridge changes
+remain outside that binary and are separately host/syntax-tested. The test build
+uses a scoped C: alias for direct-launch CWD and refuses external direct 32-bit
+starts. Do not describe it as a complete source build.

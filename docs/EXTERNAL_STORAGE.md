@@ -1,9 +1,10 @@
 # External SSD implementation record
 
 Status on 2026-10-09: **data access and a controlled external EXE/DLL/asset/save fixture verified
-on an iPad; the integrated external game library remains unimplemented.**
-This is a first increment for [issue 131](https://github.com/willfaust/Madeira/issues/131),
-not a claim that games can yet install or run from an SSD.
+on an iPad; library integration is implemented and installed for device testing.**
+The first physical Steam download and gameplay checks for
+[issue 131](https://github.com/willfaust/Madeira/issues/131) are pending.
+Host success and installation are not claims of user-confirmed SSD gameplay.
 
 ## Source and build baseline
 
@@ -61,8 +62,9 @@ These are binary provenance fingerprints, not evidence of source equivalence.
 ## Implemented increment
 
 - `SteamStorageLibrary`: internal identity `internal`, one external UUID,
-  display name and bookmark. C: is internal; E: is a proposed external path
-  representation only, **not yet registered with Wine**.
+  display name and bookmark. C: is internal; E: is the registered external
+  mapping. The source native bridge resolves E: only with the matching marker;
+  the mixed-source diagnostic build needs the compatibility alias below.
 - A `.madeira-library-id` marker binds bookmark resolution to library identity.
   Reauthorisation requires the existing identity. Missing markers are never
   recreated on reconnect; a different folder at the old location fails closed.
@@ -129,11 +131,12 @@ folder selection. It imports no copy of the folder.
 | `check-dock-path.py` | PASS with `WINE_FILE_C=/tmp/madeira-pinned-wine-file.c`, fetched from the exact pinned Wine commit |
 | `check-dock-contract.py` | PASS against initialized pinned Dock source |
 | `check-launch-routing.py` | PASS |
-| `tests/host/typecheck-ios.py` | PASS, all 64 production Swift sources and real bridging header against iOS SDK; no native linking |
+| `tests/host/typecheck-ios.py` | PASS, all 65 production Swift sources and real bridging header against iOS SDK; no native linking |
 | Standalone probe | Debug unsigned and signed build PASS; installation and foreground launch PASS |
 | First SSD test | User reported PASS on physical iPad: bookmark resolve plus data operations |
 | Restart/unplug/reconnect | User explicitly confirmed FAIL unplugged, PASS reconnected without selecting the folder again |
-| Full Madeira app | Build blocked by missing resources/native inputs; no new app installed |
+| Full native source app | Still blocked by missing resources/native archives |
+| Source Swift interface + prebuilt native runtime | 65-source compile/link, signing, isolated installation and launch PASS; user confirmed the interface opens |
 | External Windows EXE/DLL + relative asset/save | PASS in the isolated prebuilt-runtime harness, confirmed by the user |
 | Dock and Brotato from SSD | NOT TESTED |
 
@@ -150,33 +153,54 @@ external executable loading. No physical read-only, permission-revocation,
 >4 GiB, APFS/exFAT comparison, background expiration, game-session unplug, or
 internal-storage growth tests have been performed.
 
-## Gate before integrating external games
+## Integrated library behavior and remaining device gate
 
 The native Dock source's `src/launch.c` normalizes Steam's actual install path
 with `GetFullPathNameW` and compares it case-insensitively with
 `MADEIRA_STEAM_HOST_EXPECTED_INSTALL`. That comparison is not limited to C:.
-This permits investigating E:, but does not prove Valve's client or Wine
-accepts a security-scoped external library. The Swift discovery and native
-working-directory bridge still assume C:.
+The controlled fixture proved E: EXE/DLL/asset/save access. The production source
+now carries library identity through queues, downloads, retries, resume, update,
+repair, deletion, discovery, metadata, launch paths and GameInstall cloud saves.
+Legacy entries without a library ID remain internal. Existing installations are
+not moved. A saved partial destination cannot be retargeted by a later choice.
 
-The next step needs a Wine-capable build with the shared folder-access code:
-run a controlled Windows EXE that imports a DLL and reads/writes relative
-assets on the SSD, retaining scope and coordination until the entire Wine
-session stops. Investigate file-presenter relinquishment, cancellation,
-backgrounding and disconnect while Wine is using raw descriptors. A symlink
-alone or a retained security scope without coordination is not sufficient.
-Then test both Dock and direct Brotato launches before selecting E: versus a
-registered C: alias based on evidence.
+Settings → Game storage registers or reauthorizes the one external folder. The
+uninstalled game's page has an explicit Download to picker. Its capacity is
+read from that library's volume. Download payloads, journals, caches and install
+records use its `steamapps`; prefix, client and normal user folders stay internal.
+Discovery keeps internal snapshots when the SSD is absent. A failed save audit
+cannot acknowledge missing external files as deleted saves.
 
-After that gate, the following requested work is still required: library-ID
-migration of existing entries; selected-library download queues and persisted
-partial-install identity; external discovery, updates, repair and uninstall;
-Steam libraryfolders registration and one-time installers; per-library metadata
-and free-space UI; native working-directory mapping; GameInstall save and Cloud
-resolution that cannot interpret missing storage as deleted saves; disconnect
-recovery and the complete physical-device matrix. Existing games and queues
-remain internal. The prototype never silently redirects an SSD operation into
-internal storage.
+A reference-counted access lease retains one coordinated accessor and security
+scope across async operations and the entire Wine session. Save operations during
+a session share that accessor rather than deadlocking on a nested coordinator.
+The last client releases it only after its handles are closed; the session owner
+waits for both Wine and wineserver to stop. Hardware disconnection can still end
+an operation/session and cannot preserve unsaved game state.
+
+Before launch, the app validates the marker, updates its owned E: symlink, and
+writes a bounded `libraryfolders.vdf` update preserving unrelated entries. The
+prefix's owner record prevents stealing another mapping. Native source resolves
+E: working directories and PE types without a Z: fallback. One-time installer
+lookup receives the external game root while scripts and registry remain internal.
+
+**Mixed-source build limitation:** the preserved native binary has a C:-only
+working-directory and direct Steam-identity bridge. Only this diagnostic build
+creates a second owned `C:\MadeiraExternalLibrary` alias to the same scoped root
+and passes that alias as the direct launch's working folder/SteamAppPath. The
+canonical executable path, discovery and Dock expected-install path remain E:.
+This does not patch the native binary. Direct external 32-bit starts are refused
+in this build because its old PE probe cannot inspect E:. The native source fix
+is host-tested and syntax-checked, not linked into the published runtime.
+
+Still required: physical Steam download completion, normal Dock and direct
+Brotato gameplay, restart/reconnect launches, download unplug/resume,
+background/foreground/cancel, low-space/read-only, >4 GiB, APFS/exFAT where
+available, and before/after internal growth. File-presenter relinquishment under
+other coordinated clients remains unverified. The test app's pre-download
+baseline was 1,288,441,301 regular-file bytes (863 files), excluding symlinks and
+external aliases, with **zero bytes in the internal Steam game payload folder**.
+That is a baseline, not a completed no-duplication measurement.
 
 ## Follow-up: isolated reuse of the published runtime
 
@@ -212,7 +236,7 @@ IDs decode as internal; resolving an address against another library is refused.
 assignments internally, including partial installs. An existing assignment cannot
 change destination. Transactions validate and atomically write the new catalog
 before publishing it in memory; corrupt catalogs fail closed rather than resetting
-to an empty internal library. These primitives are not yet wired to the install UI.
+to an empty internal library. These primitives now back the install destination UI.
 
 `SteamExternalAccess.perform` spans an entire async operation with a coordinated
 accessor. Its cancellation bridge cancels the operation and waits for its cleanup
@@ -220,7 +244,7 @@ before returning and releasing the scope. The production-code host integration
 suite passed migration, destination persistence, retarget refusal, failed-write
 rollback, corrupt-record refusal, moved-root resolution, cancellation before
 starting, and cancellation cleanup checks. All 64 app Swift sources type-check
-for iOS with these additions. Live async downloader integration is still pending.
+for iOS with these additions. These operations are now wired to the storage model; live disconnect/cancellation checks remain pending.
 
 The runtime harness now also has a `FRONTEND=source` mode: the complete checkout
 Swift interface links to the preserved native binary. Three hidden native symbols
@@ -228,7 +252,7 @@ are forwarded to verified existing implementations, with a hash-pinned input and
 per-source/output provenance. It compiled, signed, installed in the disposable
 probe container and launched a running `MadeiraSSDSource` process. This provides
 a device-test route for the upcoming Swift integration; native changes remain
-separate. Visual acceptance and Steam sign-in are pending. The owner confirmed
+separate. The user confirmed the source interface opens. Steam download and gameplay checks remain pending. The owner confirmed
 Brotato is only in the working app; no game or credentials were copied from it.
 
 ### Downloader I/O follow-up
