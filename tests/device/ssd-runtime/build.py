@@ -22,6 +22,8 @@ root = Path(__file__).resolve().parents[3]
 source = Path(os.environ['SOURCE_APP']).resolve()
 team = os.environ['TEAM_ID']
 bundle = os.environ['BUNDLE_ID']
+frontend = os.environ.get('FRONTEND', 'probe')
+assert frontend in ('probe', 'source'), 'FRONTEND must be probe or source'
 source_info = plistlib.loads((source / 'Info.plist').read_bytes())
 assert bundle != source_info['CFBundleIdentifier'], 'Use a distinct bundle ID'
 expected = 'd942617b44d57bb23b3e97dce87cf5272265e239dc5d6434dac11030341d6446'
@@ -65,14 +67,17 @@ for item in ['ssd_probe.exe', 'ssd_probe.dll', 'assets']:
     src = fixture / item
     if src.is_dir(): shutil.copytree(src, app / 'ssd-fixture' / item)
     else: shutil.copy2(src, app / 'ssd-fixture' / item)
-run(['xcrun', '--sdk', 'iphoneos', 'swiftc', '-emit-library', '-swift-version', '5', '-module-name', 'MadeiraSSDOverlay', '-target', 'arm64-apple-ios17.0', '-sdk', sdk,
+if frontend == 'source':
+    run(['python3', root / 'tests/device/ssd-runtime/build-source.py', source, app / 'MadeiraSSDSource'])
+else:
+    run(['xcrun', '--sdk', 'iphoneos', 'swiftc', '-emit-library', '-swift-version', '5', '-module-name', 'MadeiraSSDOverlay', '-target', 'arm64-apple-ios17.0', '-sdk', sdk,
      *[root / 'app/Madeira' / x for x in ['SteamStorage.swift', 'SteamStorageProbe.swift', 'SteamStorageProbeView.swift']],
      root / 'tests/device/ssd-runtime/Overlay.swift', '-o', app / 'MadeiraSSDOverlay.dylib',
-     '-Xlinker', '-install_name', '-Xlinker', '@executable_path/MadeiraSSDOverlay.dylib'])
-run(['xcrun', '--sdk', 'iphoneos', 'clang', '-arch', 'arm64', '-miphoneos-version-min=17.0', '-isysroot', sdk,
+         '-Xlinker', '-install_name', '-Xlinker', '@executable_path/MadeiraSSDOverlay.dylib'])
+    run(['xcrun', '--sdk', 'iphoneos', 'clang', '-arch', 'arm64', '-miphoneos-version-min=17.0', '-isysroot', sdk,
      '-fobjc-arc', root / 'tests/device/ssd-runtime/main.m', '-framework', 'Foundation',
      app / 'MadeiraSSDOverlay.dylib', '-Wl,-rpath,@executable_path', '-Wl,-rpath,@executable_path/Frameworks',
-     '-o', app / 'MadeiraSSDWrapper'])
+         '-o', app / 'MadeiraSSDWrapper'])
 
 def rewrite(value):
     if isinstance(value, str): return value.replace(source_info['CFBundleIdentifier'], bundle)
@@ -90,11 +95,18 @@ identity = re.search(r'\b[A-F0-9]{40}\b', identities[0]).group()
 for target, signed, name in [(app, stub, 'App'), (app / 'PlugIns/MadeiraJITHelper.appex', stub / 'PlugIns/MadeiraJITHelper.appex', 'Helper')]:
     info = rewrite(plistlib.loads((target / 'Info.plist').read_bytes()))
     if name == 'App':
-        info.update(CFBundleExecutable='MadeiraSSDWrapper', CFBundleDisplayName='Madeira SSD Runtime', MadeiraBuild='SSD runtime binary-reuse experiment')
+        info.update(CFBundleExecutable='MadeiraSSDSource' if frontend == 'source' else 'MadeiraSSDWrapper',
+                    CFBundleDisplayName='Madeira SSD Library' if frontend == 'source' else 'Madeira SSD Runtime',
+                    MadeiraBuild='SSD source frontend / prebuilt native runtime' if frontend == 'source' else 'SSD runtime binary-reuse experiment')
     (target / 'Info.plist').write_bytes(plistlib.dumps(info))
     shutil.copy2(signed / 'embedded.mobileprovision', target / 'embedded.mobileprovision')
     entitlement = subprocess.run(['codesign', '-d', '--entitlements', ':-', str(signed)], capture_output=True, check=True).stdout
     (work / (name + '.entitlements')).write_bytes(entitlement)
+if frontend == 'source':
+    source_provenance = json.loads((app / 'MadeiraSSDSource.source-provenance.json').read_text())
+    # Intermediate source/object files are build records, not app resources.
+    for suffix in ['.forward.c', '.forward.o', '.source-provenance.json']:
+        shutil.move(app / ('MadeiraSSDSource' + suffix), work / ('MadeiraSSDSource' + suffix))
 for target in sorted([x for x in app.rglob('*') if x.suffix in ('.dylib', '.framework')], key=lambda p: len(p.parts), reverse=True):
     run(['codesign', '--force', '--sign', identity, '--timestamp=none', target], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 for target, name in [(app / 'PlugIns/MadeiraJITHelper.appex', 'Helper'), (app, 'App')]:
@@ -102,9 +114,11 @@ for target, name in [(app / 'PlugIns/MadeiraJITHelper.appex', 'Helper'), (app, '
 run(['codesign', '--verify', '--deep', '--strict', app])
 source_files = [root / 'tests/device/ssd-runtime' / x for x in ['build.py', 'main.m', 'Overlay.swift', 'fixture/build.sh', 'fixture/probe.c', 'fixture/probe_dll.c']]
 source_files += [root / 'app/Madeira' / x for x in ['SteamStorage.swift', 'SteamStorageProbe.swift', 'SteamStorageProbeView.swift']]
+if frontend == 'source': source_files.append(root / 'tests/device/ssd-runtime/build-source.py')
 provenance = {
     'runtime_input_sha256': expected,
     'runtime_source_build': False,
+    'frontend': frontend,
     'wrapper_source_head': subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=root, text=True).strip(),
     'wrapper_sources_uncommitted': bool(subprocess.check_output(['git', 'status', '--porcelain'], cwd=root)),
     'bundle_id': bundle,
@@ -112,8 +126,9 @@ provenance = {
     'fixture_toolchain_archive_sha256': 'bd85a3975723815cef28dbbd2ca2cb0c926f6b348a12a0453f39f7af273cb3f7',
     'sources': {str(f.relative_to(root)): hashlib.sha256(f.read_bytes()).hexdigest() for f in source_files},
     'outputs': {name: hashlib.sha256((app / name).read_bytes()).hexdigest()
-                for name in ['MadeiraSSDWrapper', 'MadeiraSSDOverlay.dylib', 'ssd-fixture/ssd_probe.exe', 'ssd-fixture/ssd_probe.dll']}
+                for name in ((['MadeiraSSDSource'] if frontend == 'source' else ['MadeiraSSDWrapper', 'MadeiraSSDOverlay.dylib']) + ['ssd-fixture/ssd_probe.exe', 'ssd-fixture/ssd_probe.dll'])}
 }
+if frontend == 'source': provenance['source_frontend'] = source_provenance
 (work / 'provenance.json').write_text(json.dumps(provenance, indent=2))
 
 print(app)

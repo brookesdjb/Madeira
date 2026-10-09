@@ -102,3 +102,38 @@ experimental harness, not the final session/access manager.
 
 See [the implementation record](../../../docs/EXTERNAL_STORAGE.md) for the
 source-build baseline and earlier data-access/reconnect results.
+
+## Checkout interface with the preserved runtime
+
+`FRONTEND=source` selects a second build mode, named **Madeira SSD Library**.
+`build-source.py` compiles the actual Xcode project's Swift source list into
+module `MadeiraSSDSource` and links the supplied runtime as a native dependency.
+The distinct module keeps the checkout's Swift types separate from the published
+app's unused Swift interface. The original published `main` is not called.
+
+Three native functions exist in this particular binary but are hidden from its
+export table: `madeira_get_eco`, `madeira_set_eco`, and
+`madeira_set_diag_enabled`. The build verifies both the complete input SHA-256
+and each local symbol's address, then emits three forwarding functions. Each
+uses the loaded runtime image base plus that verified offset to call the
+existing implementation. There are no substitute implementations and no runtime
+instruction patches. Any different runtime input is refused. This narrowly
+pinned diagnostic route does not establish compatibility with other IPAs.
+
+```sh
+SOURCE_APP=/path/to/the/preserved/patched/Madeira.app \
+  TEAM_ID=your_team BUNDLE_ID=your.distinct.ssdprobe FRONTEND=source \
+  python3 tests/device/ssd-runtime/build.py
+```
+
+The provenance record includes every compiled Swift file's hash, the forwarding
+addresses, and the output hash. Native Objective-C/C, Wine, FEX, DXMT and the JIT
+helper remain prebuilt. In particular, future native bridge changes will need
+their own build and validation route. Do not describe this as a full source build.
+
+On 2026-10-09 all 64 checkout Swift sources compiled and linked through this
+route; the signed app installed over the disposable SSD probe and its
+`MadeiraSSDSource` process remained running after foreground launch. Visual
+acceptance, Steam sign-in and gameplay with this interface are pending. The
+working `com.brookes.madeira` installation was not replaced or read. Brotato
+exists only in that working app; use a fresh install for the future SSD test.
