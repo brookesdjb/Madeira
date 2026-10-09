@@ -1052,6 +1052,12 @@ func storageAsyncChecks() async throws {
     require(app.sharedOwners[9100]?.installDir == "Fixture Game", "the owner of the shared depot is known for the record")
     let downloader = DepotDownloader(session: session)
     downloader.contentHosts = { _ in hosts }
+    if phase == "symlink" {
+        let outside = tmp.appendingPathComponent("outside")
+        try FileManager.default.createDirectory(at: outside, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: steamApps, withIntermediateDirectories: true)
+        try FileManager.default.createSymbolicLink(at: steamApps.appendingPathComponent("common"), withDestinationURL: outside)
+    }
     var lastProgress = SteamDownloadProgress()
     let licensed: Set<UInt32> = phase == "refused-licensed" ? [9001, 9003, 9004] : [9001, 9003]
     do {
@@ -1059,12 +1065,13 @@ func storageAsyncChecks() async throws {
         print("RESULT install=ok")
     } catch {
         print("RESULT install=failed reason=\(SteamOwnedLibrary.reason(error))")
-        require(phase == "interrupt" || phase == "refused-licensed", "install failed only where the phase expects it (\(error))")
+        require(["interrupt", "refused-licensed", "symlink"].contains(phase), "install failed only where the phase expects it (\(error))")
+        if phase == "symlink" { require(error is SteamStorageError, "download rejects a symlink out of the selected library") }
         if phase == "refused-licensed" { require(error as? SteamError == .depotKeyNotFound(9004), "a refusal for a depot the account is licensed for fails the install") }
     }
     let found = MadeiraDock.games(drive: drive)
     print("RESULT listed=\(found.filter { $0.id == 9000 && $0.installed }.count)")
-    if phase != "interrupt" && phase != "refused-licensed" {
+    if !["interrupt", "refused-licensed", "symlink"].contains(phase) {
         require(lastProgress.phase == .finishing && lastProgress.doneBytes == lastProgress.totalBytes && lastProgress.totalBytes > 0, "progress ends complete: \(lastProgress.doneBytes)/\(lastProgress.totalBytes)")
         // Keys are asked for with the app being installed; manifest codes and tokens with the app that owns the content.
         require(session.keyRequests.contains { $0.depot == 9001 && $0.app == 9000 } && session.keyRequests.contains { $0.depot == 9003 && $0.app == 9000 }, "depot keys are requested for the installed app")
@@ -1255,6 +1262,28 @@ try:
             done.add(depot.files[key >> 32]['chunks'][key & 0xffffffff][0].hex())
     require(len(done) >= 1 and len(state.served_ok) >= 1, f'{len(done)} chunks journaled after {len(state.served_ok)} served')
 
+    # A journal is only a hint: a completed chunk can be lost/corrupted after an
+    # unplug. Preserve the journal but change one byte in a separate saved tree.
+    damaged_root = work / 'damaged-root'
+    shutil.copytree(root_dir, damaged_root)
+    selected_journal = next(j for j in journals if j.read_text().strip())
+    depot_id = int(re.match(r'depot_(\d+)_', selected_journal.name).group(1))
+    depot = {9001: version1, 9003: shared}[depot_id]
+    key = int(selected_journal.read_text().split()[0], 16)
+    damaged_entry = depot.files[key >> 32]
+    chunk = damaged_entry['chunks'][key & 0xffffffff]
+    damaged_file = damaged_root / folder.relative_to(root_dir) / damaged_entry['name'].replace('\\', '/')
+    with damaged_file.open('r+b') as f:
+        f.seek(chunk[1]); value = f.read(1); f.seek(chunk[1]); f.write(bytes([value[0] ^ 0xff]))
+    state.limit = None
+    state.reset_counters()
+    result = run('resume-corrupt', dict(fixture, tmp=str(damaged_root)))
+    require(result.get('install') == 'ok' and chunk[0].hex() in state.chunk_requests and
+            damaged_file.read_bytes() == damaged_entry['data'],
+            'resume verifies journaled bytes and repairs a corrupted completed chunk')
+    require(not ((set(state.chunk_requests) & done) - {chunk[0].hex()}),
+            'the remaining valid journaled chunks are still reused')
+
     # ---- resume: the journaled chunks are not fetched again; the install finishes
     state.limit = None
     state.reset_counters()
@@ -1319,6 +1348,11 @@ try:
     result = run('refused-licensed', other)
     require(result.get('install') == 'failed' and result.get('listed') == '0' and
             not list((work / 'root2').rglob('appmanifest_*.acf')), 'a refused licensed depot fails the install without a record')
+    state.reset_counters()
+    result = run('symlink', dict(fixture, tmp=str(work / 'symlink-root')))
+    require(result.get('install') == 'failed' and not state.chunk_requests and
+            not list((work / 'symlink-root/outside').iterdir()),
+            'a preexisting common symlink cannot redirect a download outside the library')
 finally:
     for server in servers:
         server.shutdown(); server.server_close()

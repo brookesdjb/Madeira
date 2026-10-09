@@ -85,17 +85,15 @@ final class DepotDownloader {
         SteamLog.event("[steam-depot] selection app=\(app.appID) build=\(app.buildID) \(app.depotSelectionSummary())")
 
         let folderName = SteamInstallFiles.safeFolderName(app.installDir.isEmpty ? "app_\(app.appID)" : app.installDir)
-        let installURL = steamApps.appendingPathComponent("common", isDirectory: true)
-            .appendingPathComponent(folderName, isDirectory: true)
-        let journalDir = steamApps.appendingPathComponent("downloading", isDirectory: true)
-            .appendingPathComponent("\(app.appID)", isDirectory: true)
+        let installURL = try SteamStoragePath.native("common/" + folderName, root: steamApps)
+        let journalDir = try SteamStoragePath.native("downloading/\(app.appID)", root: steamApps)
         try FileManager.default.createDirectory(at: installURL, withIntermediateDirectories: true)
         try FileManager.default.createDirectory(at: journalDir, withIntermediateDirectories: true)
 
         var state = SteamDownloadProgress()
         report(state)
 
-        depotCache = steamApps.appendingPathComponent("depotcache", isDirectory: true)
+        depotCache = try SteamStoragePath.native("depotcache", root: steamApps)
         let hosts: [String]
         if let provider = contentHosts { hosts = try await provider(app.appID) } else { hosts = try await contentServers(appID: app.appID) }
         guard !hosts.isEmpty else { throw SteamError.chunkDownloadFailed("No content servers are available.") }
@@ -168,7 +166,7 @@ final class DepotDownloader {
         var lastReport = Date.distantPast
         for (index, plan) in plans.enumerated() {
             let journal = try JournalWriter(url: prepared.journals[index])
-            defer { journal.close() }
+            defer { try? journal.close() }
             let work = prepared.pending[index]
             let paths = prepared.paths[index]
             let existing = prepared.existing[index]
@@ -189,7 +187,7 @@ final class DepotDownloader {
                 }
                 for _ in 0..<min(maximum, work.count) { enqueue() }
                 for try await (key, bytes) in group {
-                    journal.append(key)
+                    try journal.append(key)
                     state.doneBytes += bytes
                     let now = Date()
                     if now.timeIntervalSince(lastReport) >= 0.25 {
@@ -201,6 +199,8 @@ final class DepotDownloader {
                     enqueue()
                 }
             }
+            // A failed journal flush must stop before the install record is written.
+            try journal.flush()
         }
 
         // 4. Install record. Sizes come from the manifests; no tree walk.
@@ -301,7 +301,7 @@ final class DepotDownloader {
         }
         for plan in plans {
             try Task.checkCancellation()
-            let journalURL = journalDir.appendingPathComponent("depot_\(plan.depotID)_\(plan.manifestGID).journal")
+            let journalURL = try SteamStoragePath.native("depot_\(plan.depotID)_\(plan.manifestGID).journal", root: journalDir)
             let done = JournalWriter.load(journalURL)
             var paths: [String] = []
             var existing: [Bool] = []
@@ -314,7 +314,7 @@ final class DepotDownloader {
                     if file.flags & 0x200 == 0 { SteamLog.trace("rejected manifest path in depot \(plan.depotID)") }
                     paths.append(""); existing.append(false); continue
                 }
-                let url = installURL.appendingPathComponent(relative)
+                let url = try SteamStoragePath.native(relative, root: installURL)
                 if file.isDirectory {
                     try fm.createDirectory(at: url, withIntermediateDirectories: true)
                     paths.append(""); existing.append(false); continue
@@ -331,7 +331,7 @@ final class DepotDownloader {
                 for (chunkIndex, chunk) in file.chunks.enumerated() {
                     let item = WorkItem(file: fileIndex, chunk: chunkIndex)
                     result.totalBytes += UInt64(chunk.compressedSize)
-                    if done.contains(item.key) {
+                    if done.contains(item.key), chunkAlreadyPresent(chunk, path: url.path) {
                         result.doneBytes += UInt64(chunk.compressedSize)
                     } else {
                         pending.append(item)
@@ -355,7 +355,7 @@ final class DepotDownloader {
     /// Create or resize a file to its manifest length. Existing bytes below
     /// that length are kept so resumed and updated installs reuse them.
     private nonisolated static func sizeFile(_ path: String, to size: UInt64) throws {
-        let fd = open(path, O_WRONLY | O_CREAT, 0o644)
+        let fd = open(path, O_WRONLY | O_CREAT | O_NOFOLLOW, 0o644)
         guard fd >= 0 else { throw SteamError.chunkDownloadFailed("Cannot create a game file (errno \(errno)).") }
         defer { close(fd) }
         var info = stat()
@@ -374,7 +374,7 @@ final class DepotDownloader {
         let length = Int(chunk.uncompressedSize)
         guard chunk.sha.count == Int(CC_SHA1_DIGEST_LENGTH), length > 0,
               length <= ContentDecryptor.maximumChunkBytes else { return false }
-        let fd = open(path, O_RDONLY)
+        let fd = open(path, O_RDONLY | O_NOFOLLOW)
         guard fd >= 0 else { return false }
         defer { close(fd) }
         var buffer = [UInt8](repeating: 0, count: length)
@@ -424,7 +424,7 @@ final class DepotDownloader {
     }
 
     private nonisolated static func write(_ data: Data, to path: String, offset: UInt64) throws {
-        let fd = open(path, O_WRONLY)
+        let fd = open(path, O_WRONLY | O_NOFOLLOW)
         guard fd >= 0 else { throw SteamError.chunkDownloadFailed("Cannot open a game file (errno \(errno)).") }
         defer { close(fd) }
         try data.withUnsafeBytes { raw in
@@ -465,7 +465,7 @@ final class DepotDownloader {
                     // when it prepares a per-user custom executable. Keep it for such depots.
                     if let cache, manifest.files.contains(where: { $0.flags & DepotManifest.customExecutableFlag != 0 }) {
                         try? FileManager.default.createDirectory(at: cache, withIntermediateDirectories: true)
-                        let file = cache.appendingPathComponent("\(depotID)_\(manifestGID).manifest")
+                        let file = try SteamStoragePath.native("\(depotID)_\(manifestGID).manifest", root: cache)
                         let existing = (try? file.resourceValues(forKeys: [.fileSizeKey]))?.fileSize
                         if existing != payload.count { try? payload.write(to: file, options: .atomic) }
                     }
@@ -759,35 +759,35 @@ final class JournalWriter {
     private var pending = 0
 
     init(url: URL) throws {
-        if !FileManager.default.fileExists(atPath: url.path) {
-            FileManager.default.createFile(atPath: url.path, contents: nil)
-        }
-        handle = try FileHandle(forUpdating: url)
+        let fd = open(url.path, O_RDWR | O_CREAT | O_NOFOLLOW, 0o644)
+        guard fd >= 0 else { throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO) }
+        handle = FileHandle(fileDescriptor: fd, closeOnDealloc: true)
         // A previous attempt killed mid-write can leave a partial last line;
         // start on a fresh line so the first new key is not glued onto it.
-        let end = handle.seekToEndOfFile()
+        let end = try handle.seekToEnd()
         if end > 0 {
-            handle.seek(toFileOffset: end - 1)
-            if handle.readData(ofLength: 1) != Data([0x0A]) { buffer = "\n" }
-            handle.seekToEndOfFile()
+            try handle.seek(toOffset: end - 1)
+            if try handle.read(upToCount: 1) != Data([0x0A]) { buffer = "\n" }
+            _ = try handle.seekToEnd()
         }
     }
 
-    func append(_ key: UInt64) {
+    func append(_ key: UInt64) throws {
         buffer += String(key, radix: 16) + "\n"
         pending += 1
-        if pending >= 64 { flush() }
+        if pending >= 64 { try flush() }
     }
 
-    func flush() {
+    func flush() throws {
         guard !buffer.isEmpty else { return }
-        handle.write(Data(buffer.utf8))
+        try handle.write(contentsOf: Data(buffer.utf8))
+        try handle.synchronize()
         buffer = ""; pending = 0
     }
 
-    func close() {
-        flush()
-        try? handle.close()
+    func close() throws {
+        defer { try? handle.close() }
+        try flush()
     }
 
     static func load(_ url: URL) -> Set<UInt64> {

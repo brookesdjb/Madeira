@@ -230,3 +230,15 @@ probe container and launched a running `MadeiraSSDSource` process. This provides
 a device-test route for the upcoming Swift integration; native changes remain
 separate. Visual acceptance and Steam sign-in are pending. The owner confirmed
 Brotato is only in the working app; no game or credentials were copied from it.
+
+### Downloader I/O follow-up
+
+The existing host integration suite also passes two new production-downloader
+cases: an interrupted tree with a corrupted but journaled chunk is repaired while
+other valid completed chunks are reused; and a preexisting `common` symlink cannot
+redirect an install outside its library. Payload, journal, cache and install-record
+paths now reject symlink components. Payload opens use `O_NOFOLLOW`; journal opens
+do likewise and use throwing FileHandle APIs. A journal flush failure stops the
+install before the final record is written, instead of raising an Objective-C
+exception or silently publishing completion. These are host checks, not a live
+SSD unplug-during-download result.
