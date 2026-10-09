@@ -910,9 +910,50 @@ func storageAsyncChecks() async throws {
     }
 }
 
+@MainActor func preparationCancellationChecks() async throws {
+    let fm = FileManager.default
+    let root = fm.temporaryDirectory.appendingPathComponent("prepare-cancel-" + UUID().uuidString)
+    defer { try? fm.removeItem(at: root) }
+    let files = root.appendingPathComponent("files"), journals = root.appendingPathComponent("journals")
+    try fm.createDirectory(at: files, withIntermediateDirectories: true)
+    try fm.createDirectory(at: journals, withIntermediateDirectories: true)
+    var manifest = DepotManifest(depotID: 77, manifestGID: 88, creationTime: 0,
+                                 totalUncompressedSize: 0, totalCompressedSize: 0)
+    manifest.files = (0..<5000).map { .init(filename: "part-\($0)", size: 0, flags: 0, chunks: []) }
+    let plan = DepotDownloader.DepotPlan(depotID: 77, manifestGID: 88, key: Data(), manifest: manifest,
+                                        hosts: [], auth: [:], declaredSize: 0, health: ContentHostHealth())
+    let cancelled = Task {
+        withUnsafeCurrentTask { $0?.cancel() }
+        return try await DepotDownloader.prepareForInstall(plans: [plan], installURL: files, journalDir: journals)
+    }
+    do { _ = try await cancelled.value; require(false, "preparation: pre-cancelled request is rejected") }
+    catch {
+        let filesAfterCancel = try fm.contentsOfDirectory(atPath: files.path)
+        require(error is CancellationError && filesAfterCancel.isEmpty,
+                "preparation: pre-cancelled request makes no payload files")
+    }
+    let running = Task {
+        try await DepotDownloader.prepareForInstall(plans: [plan], installURL: files, journalDir: journals)
+    }
+    let deadline = Date().addingTimeInterval(10)
+    while !fm.fileExists(atPath: files.appendingPathComponent("part-0").path), Date() < deadline {
+        try await Task.sleep(nanoseconds: 1_000_000)
+    }
+    require(fm.fileExists(atPath: files.appendingPathComponent("part-0").path), "preparation: actual filesystem work began")
+    running.cancel()
+    do { _ = try await running.value; require(false, "preparation: active request observes cancellation") }
+    catch { require(error is CancellationError, "preparation: active request observes cancellation") }
+    let stopped = try fm.contentsOfDirectory(atPath: files.path).count
+    try await Task.sleep(nanoseconds: 20_000_000)
+    let after = try fm.contentsOfDirectory(atPath: files.path).count
+    require(stopped > 0 && stopped < 5000 && after == stopped,
+            "preparation: cancellation waits for worker to stop touching the library")
+}
+
 @MainActor func units(_ fx: [String: Any]) async throws {
     try storageChecks()
     try await storageAsyncChecks()
+    try await preparationCancellationChecks()
     // ---- protobuf: hostile input throws instead of trapping
     var big = ProtobufDecoder(Data([0x0a, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x01]))
     _ = try? big.readTag()

@@ -536,3 +536,16 @@ and launch succeeded in the isolated test bundle. Build and provenance:
 `/tmp/madeira-ssd-source-v11`. On-device removal detection without closing the
 card remains to be confirmed; allow several seconds for the periodic check and
 provider response, then reconnect/check/resume in the same card.
+
+## Host follow-up: pause during file verification
+
+The detached preparation pass did not inherit cancellation from the download,
+and checked cancellation only between depots. For large resumed games, Pause or
+background expiration could leave verification touching the SSD for a long time.
+`prepareForInstall` now forwards cancellation into its worker and awaits its
+completion; preparation checks between files/chunks, and final install-record
+publication checks cancellation too. Production host coverage uses an actual
+5,000-file preparation plan, cancels after the first file appears, and verifies
+that work stopped before completion and no further files appeared after return.
+A pre-cancelled request makes no payload files. The full library suite passed
+under AddressSanitizer. This is host evidence, not a new physical background test.

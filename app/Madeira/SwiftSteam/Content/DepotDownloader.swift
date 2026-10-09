@@ -144,9 +144,7 @@ final class DepotDownloader {
         }
 
         // 2. Prepare files and load journals off the main actor.
-        let prepared = try await Task.detached(priority: .userInitiated) {
-            try Self.prepare(plans: plans, installURL: installURL, journalDir: journalDir)
-        }.value
+        let prepared = try await Self.prepareForInstall(plans: plans, installURL: installURL, journalDir: journalDir)
         state.totalBytes = prepared.totalBytes
         state.doneBytes = prepared.doneBytes
         state.phase = .downloading
@@ -203,6 +201,7 @@ final class DepotDownloader {
         }
 
         // 4. Install record. Sizes come from the manifests; no tree walk.
+        try Task.checkCancellation()
         state.phase = .finishing
         report(state)
         let installed = plans.map { plan in
@@ -289,7 +288,22 @@ final class DepotDownloader {
         var fileCount = 0
     }
 
+    /// Keep expensive verification off the UI actor, but propagate Pause and
+    /// background expiration to it and await its cleanup before releasing access.
+    nonisolated static func prepareForInstall(plans: [DepotPlan], installURL: URL, journalDir: URL) async throws -> Prepared {
+        try Task.checkCancellation()
+        let worker = Task.detached(priority: .userInitiated) {
+            try prepare(plans: plans, installURL: installURL, journalDir: journalDir)
+        }
+        return try await withTaskCancellationHandler {
+            let prepared = try await worker.value
+            try Task.checkCancellation()
+            return prepared
+        } onCancel: { worker.cancel() }
+    }
+
     private nonisolated static func prepare(plans: [DepotPlan], installURL: URL, journalDir: URL) throws -> Prepared {
+        try Task.checkCancellation()
         let fm = FileManager.default
         var result = Prepared()
         var folded: [String: String] = [:]   // lowercased relative dir -> first spelling
@@ -307,6 +321,7 @@ final class DepotDownloader {
             var pending: [WorkItem] = []
             paths.reserveCapacity(plan.manifest.files.count)
             for (fileIndex, file) in plan.manifest.files.enumerated() {
+                try Task.checkCancellation()
                 // Symlinks (flag 0x200) have no Windows meaning here; skip them.
                 guard file.flags & 0x200 == 0,
                       let relative = SteamInstallFiles.safeRelativePath(file.filename, folded: &folded) else {
@@ -328,6 +343,7 @@ final class DepotDownloader {
                 result.totalUncompressed += file.size
                 var pendingBytes: UInt64 = 0
                 for (chunkIndex, chunk) in file.chunks.enumerated() {
+                    try Task.checkCancellation()
                     let item = WorkItem(file: fileIndex, chunk: chunkIndex)
                     result.totalBytes += UInt64(chunk.compressedSize)
                     if done.contains(item.key), chunkAlreadyPresent(chunk, path: url.path) {
