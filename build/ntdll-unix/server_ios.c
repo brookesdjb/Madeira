@@ -3250,7 +3250,10 @@ NTSTATUS unixcall_wine_server_handle_to_fd( void *args )
 int server_pipe( int fd[2] )
 {
     int ret;
-#ifdef HAVE_PIPE2
+#if defined(HAVE_PIPE2) && !defined(WINE_IOS)
+    /* A macOS-configured HAVE_PIPE2 can come from the iOS 27 SDK while this
+     * app still runs on iOS 26. Use pipe + fcntl on iOS instead of calling
+     * the weak-imported pipe2 entry point when it may be absent. */
     static BOOL have_pipe2 = TRUE;
 
     if (have_pipe2)
