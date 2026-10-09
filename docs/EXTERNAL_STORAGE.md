@@ -464,3 +464,20 @@ do likewise and use throwing FileHandle APIs. A journal flush failure stops the
 install before the final record is written, instead of raising an Objective-C
 exception or silently publishing completion. These are host checks, not a live
 SSD unplug-during-download result.
+
+## Source-v9 installation for the next device check
+
+After confirming Borderlands ran well, the owner requested installation of the
+next test build. The prepared source-v9 app passed strict/deep code-signature
+verification, installed successfully over the isolated SSD test app and launched
+on 2026-10-09. Post-install readback confirms
+`env.MADEIRA_WOW_SMALL_VA_SLOTS = 4` remains set and Borderlands retains
+installed=true, pending=false and 13,148,046,648 catalog bytes. The original
+Madeira bundle was not targeted. This establishes deployment and preserved
+configuration/catalog state, not device acceptance of the new controls.
+
+Next owner check: start a fresh SSD download for another game, pause it, reopen
+the app and verify Resume remains available instead of a misleading Play/Open
+action. With that transfer paused, unplug the SSD and verify the download sheet
+provides connection recovery and blocks resume until the library is available;
+reconnect, check connection and resume the existing transfer.
