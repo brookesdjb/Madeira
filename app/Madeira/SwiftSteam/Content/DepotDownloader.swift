@@ -353,11 +353,13 @@ final class DepotDownloader {
                         pendingBytes += UInt64(chunk.uncompressedSize)
                     }
                 }
-                // Space already allocated to an existing file is reused; only
-                // its growth needs new space (sparse new files need all of it).
-                let beforeSize = hadContent ? UInt64(before.st_size) : 0
-                result.remainingUncompressed += hadContent
-                    ? (file.size > beforeSize ? file.size - beforeSize : 0) : pendingBytes
+                // ftruncate gives partial downloads their final logical size;
+                // that is not proof their missing chunks occupy disk space.
+                // Reuse actual allocation, and never charge for sparse holes
+                // that no pending chunk will fill. POSIX st_blocks uses 512-byte units.
+                let allocated = hadContent ? UInt64(max(0, before.st_blocks)) * 512 : 0
+                let unallocated = file.size - min(file.size, allocated)
+                result.remainingUncompressed += min(pendingBytes, unallocated)
             }
             result.paths.append(paths)
             result.existing.append(existing)
@@ -370,6 +372,9 @@ final class DepotDownloader {
     /// Create or resize a file to its manifest length. Existing bytes below
     /// that length are kept so resumed and updated installs reuse them.
     private nonisolated static func sizeFile(_ path: String, to size: UInt64) throws {
+        guard size <= UInt64(Int64.max) else {
+            throw SteamError.chunkDownloadFailed("A game file exceeds the supported file size.")
+        }
         let fd = open(path, O_WRONLY | O_CREAT | O_NOFOLLOW, 0o644)
         guard fd >= 0 else { throw SteamError.chunkDownloadFailed("Cannot create a game file (errno \(errno)).") }
         defer { close(fd) }

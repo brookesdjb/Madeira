@@ -549,3 +549,21 @@ publication checks cancellation too. Production host coverage uses an actual
 that work stopped before completion and no further files appeared after return.
 A pre-cancelled request makes no payload files. The full library suite passed
 under AddressSanitizer. This is host evidence, not a new physical background test.
+
+## Host follow-up: sparse resume space and large offsets
+
+A new production preparation fixture reproduced a capacity-estimate bug: after
+`ftruncate` set a partial file to its final length, resume treated that logical
+length as already allocated and estimated zero new bytes for a missing chunk.
+The estimator now uses POSIX allocated blocks, bounded by pending chunk bytes,
+so it counts unallocated payload without charging for untouched sparse holes.
+Unsupported file lengths above signed 64-bit offsets are refused before creating
+the file instead of trapping on conversion.
+
+The host fixture creates a sparse file slightly larger than 5 GiB, verifies and
+reuses its first journaled chunk, checks space for the missing tail, then writes
+and verifies the tail beyond 4 GiB. A complete resume estimates no new space.
+The regression failed before the estimator fix and passed afterwards; the full
+library suite passed under AddressSanitizer. This verifies host sparse-file
+behaviour and offsets, not an iPad/exFAT/APFS physical large-file test or actual
+low-space exhaustion on the iPad.

@@ -950,10 +950,66 @@ func storageAsyncChecks() async throws {
             "preparation: cancellation waits for worker to stop touching the library")
 }
 
+@MainActor func sparseResumeChecks() async throws {
+    let fm = FileManager.default
+    let root = fm.temporaryDirectory.appendingPathComponent("sparse-resume-" + UUID().uuidString)
+    defer { try? fm.removeItem(at: root) }
+    let files = root.appendingPathComponent("files"), journals = root.appendingPathComponent("journals")
+    try fm.createDirectory(at: files, withIntermediateDirectories: true)
+    try fm.createDirectory(at: journals, withIntermediateDirectories: true)
+    let payload = Data(repeating: 0x71, count: 4096)
+    var sha = [UInt8](repeating: 0, count: Int(CC_SHA1_DIGEST_LENGTH))
+    _ = payload.withUnsafeBytes { CC_SHA1($0.baseAddress, CC_LONG($0.count), &sha) }
+    let size: UInt64 = 5 * 1024 * 1024 * 1024 + 4096
+    let chunks = [UInt64(0), size - 4096].map {
+        DepotManifest.ChunkEntry(sha: Data(sha), crc: 0, offset: $0, compressedSize: 100, uncompressedSize: 4096)
+    }
+    var manifest = DepotManifest(depotID: 66, manifestGID: 99, creationTime: 0,
+                                 totalUncompressedSize: size, totalCompressedSize: 200)
+    manifest.files = [.init(filename: "large.bin", size: size, flags: 0, chunks: chunks)]
+    let plan = DepotDownloader.DepotPlan(depotID: 66, manifestGID: 99, key: Data(), manifest: manifest,
+                                        hosts: [], auth: [:], declaredSize: size, health: ContentHostHealth())
+    let initial = try await DepotDownloader.prepareForInstall(plans: [plan], installURL: files, journalDir: journals)
+    require(initial.remainingUncompressed == 8192, "sparse: initial estimate counts payload chunks, not empty holes")
+    let file = files.appendingPathComponent("large.bin")
+    let handle = try FileHandle(forUpdating: file)
+    defer { try? handle.close() }
+    try handle.write(contentsOf: payload)
+    try handle.synchronize()
+    let journal = try JournalWriter(url: journals.appendingPathComponent("depot_66_99.journal"))
+    try journal.append(0); try journal.flush()
+    let partial = try await DepotDownloader.prepareForInstall(plans: [plan], installURL: files, journalDir: journals)
+    require(partial.doneBytes == 100 && partial.pending[0].count == 1,
+            "sparse: verified first chunk is reused in a file larger than 4 GiB")
+    require(partial.remainingUncompressed == 4096,
+            "sparse: resumed logical length does not imply missing payload is allocated")
+    try handle.seek(toOffset: size - 4096)
+    try handle.write(contentsOf: payload); try handle.synchronize()
+    try journal.append(1); try journal.close()
+    let complete = try await DepotDownloader.prepareForInstall(plans: [plan], installURL: files, journalDir: journals)
+    require(complete.doneBytes == 200 && complete.pending[0].isEmpty && complete.remainingUncompressed == 0,
+            "sparse: chunk beyond 4 GiB verifies and a complete resume needs no new space")
+    try handle.seek(toOffset: size - 4096)
+    let tail = try handle.read(upToCount: 4096)
+    require(tail == payload, "sparse: tail bytes survive preparation and reopening beyond 4 GiB")
+    var oversized = manifest
+    oversized.files = [.init(filename: "oversized.bin", size: UInt64.max, flags: 0, chunks: [])]
+    let invalid = DepotDownloader.DepotPlan(depotID: 66, manifestGID: 99, key: Data(), manifest: oversized,
+                                           hosts: [], auth: [:], declaredSize: UInt64.max, health: ContentHostHealth())
+    do {
+        _ = try await DepotDownloader.prepareForInstall(plans: [invalid], installURL: files, journalDir: journals)
+        require(false, "sparse: unsupported file length is refused without an integer trap")
+    } catch {
+        require(!fm.fileExists(atPath: files.appendingPathComponent("oversized.bin").path),
+                "sparse: unsupported file length is refused before creating its payload")
+    }
+}
+
 @MainActor func units(_ fx: [String: Any]) async throws {
     try storageChecks()
     try await storageAsyncChecks()
     try await preparationCancellationChecks()
+    try await sparseResumeChecks()
     // ---- protobuf: hostile input throws instead of trapping
     var big = ProtobufDecoder(Data([0x0a, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x01]))
     _ = try? big.readTag()
