@@ -591,3 +591,17 @@ file length and an overflowing offset before any chunk read/write conversion.
 Storage error classification now retains POSIX permission/read-only failures,
 including errors wrapped by a provider, instead of calling them disconnected.
 The full production library suite passed with these boundary cases.
+
+## Startup presentation investigation
+
+The current starting-screen suite passes new cases for both canonical E: game
+paths and the scoped C: alias: drawn game windows end the hold, while windows
+first seen during prerequisites remain installer windows. Existing census tests
+also pass AddressSanitizer and ThreadSanitizer. Read-only inspection of the
+hash-pinned runtime's `winios_window_census` shows a 304-byte copy stride, matching
+the current C structure size; this rules out that simple stride mismatch, not
+every possible native/frontend behavioural difference. Available device logs
+from the current app run contain no historical launch-view transitions. There
+is insufficient evidence to change reveal/focus policy, so no graphics, JIT or
+starting-screen settings were changed. The user-observed startup desktop remains
+an open physical observation.
