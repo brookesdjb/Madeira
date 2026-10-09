@@ -2,9 +2,11 @@
 
 ## Current handover (2026-10-09)
 
-- **Installed:** source-v11 in the isolated Madeira SSD Library app. Its live
-  removal check while a card stays open still needs the owner test.
-- **Prepared, not installed:** source-v13 at
+- **Installed and launched:** source-v13 in the isolated Madeira SSD Library app,
+  after the owner requested the update. Device installation and launch commands
+  both succeeded. Its live removal check while a card stays open still needs
+  the owner test.
+- **Installed artifact:** source-v13 at
   `/tmp/madeira-ssd-source-v13/MadeiraSSDRuntime.app`, with source/native
   provenance. All 65 compiled Swift source hashes match the current checkout.
 - **New host-verified fixes:** cancellable resume verification, sparse-file
@@ -25,15 +27,14 @@
 
 Next owner checks, in order:
 
-1. On installed source-v11, keep a paused game's card open, unplug the SSD and
+1. On installed source-v13, keep a paused game's card open, unplug the SSD and
    allow a few seconds for Resume to disable. Reconnect, Check SSD connection,
    then resume in the same card.
 2. Confirm downloaded/total counts survive pause, app close and reopen. A
    read-only catalog inspection already confirms a persisted SSD progress
    snapshot of 2,958,112,528 / 29,870,931,248 bytes for the pending transfer; this
    is persisted-state evidence, not UI acceptance.
-3. When ready for source-v13 installation, pause the transfer and close the app.
-   Then check pause/resume during local-file verification and a normal SSD game
+3. Then check pause/resume during local-file verification and a normal SSD game
    launch with the existing saves. Remaining failure-matrix tests follow later.
 
 The sections below are the chronological implementation and evidence ledger;
