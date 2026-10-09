@@ -2881,10 +2881,12 @@ struct ExecutableBrowser: View {
 
 private struct LibraryPlayStyle: ButtonStyle {
     var pending: Bool
+    @Environment(\.isEnabled) private var isEnabled
     func makeBody(configuration: Configuration) -> some View {
         configuration.label.padding(.horizontal, 18).padding(.vertical, 10)
-            .foregroundStyle(.white)
-            .background(pending || configuration.isPressed ? Color(uiColor: .darkGray) : .accentColor,
+            .foregroundStyle(isEnabled ? Color.white : Color(uiColor: .secondaryLabel))
+            .background(!isEnabled ? Color(uiColor: .tertiarySystemFill) :
+                        (pending || configuration.isPressed ? Color(uiColor: .darkGray) : .accentColor),
                         in: RoundedRectangle(cornerRadius: 14))
     }
 }
@@ -2895,6 +2897,7 @@ struct LibraryDetail: View {
     @Environment(\.dismiss) private var dismiss
     @ObservedObject private var model = LibraryModel.shared
     @ObservedObject private var storage = SteamStorageModel.shared
+    @State private var showStorage = false
     @State private var importCover = false
     @State private var findCover = false
     @State private var remove = false
@@ -2961,7 +2964,10 @@ struct LibraryDetail: View {
                             Button(action: start) {
                                 HStack(spacing: 10) {
                                     // Enabling JIT can take seconds with nothing else on screen.
-                                    if model.startingJIT == entry.id {
+                                    if entry.storageID != "internal", storage.availability != .available {
+                                        Image(systemName: "externaldrive.badge.exclamationmark")
+                                        Text("SSD unavailable").fontWeight(.semibold)
+                                    } else if model.startingJIT == entry.id {
                                         ProgressView().tint(.white)
                                         Text("Starting JIT").fontWeight(.semibold)
                                     } else {
@@ -2977,9 +2983,11 @@ struct LibraryDetail: View {
                                         if storage.checking { ProgressView() }
                                         Text(storage.checking ? "Checking SSD…" : "Check SSD connection")
                                     }
-                                }.disabled(storage.checking)
+                                }.buttonStyle(.borderless).disabled(storage.checking)
                                 Text(storage.problem ?? "Reconnect the SSD before playing.").font(.footnote)
-                                NavigationLink("Reconnect SSD folder") { SteamStorageSettings() }
+                                Button("Storage options") { showStorage = true }
+                                    .buttonStyle(.borderless)
+                                    .sheet(isPresented: $showStorage) { NavigationStack { SteamStorageSettings() } }
                             }
                         }
                     }.padding(.vertical, 24)

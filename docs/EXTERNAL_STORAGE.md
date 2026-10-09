@@ -55,6 +55,18 @@ confirmed the test app was closed, and launched. Build/provenance output is
 `/tmp/madeira-ssd-source-v7`. On-device responsiveness of the check remains to be
 confirmed; the reconnect and save observations above were on source-v6.
 
+On source-v7, the user reported that the SSD was detected as connected as soon
+as it was plugged in, and the game worked. The unavailable Play control still
+looked enabled and tapping its area opened storage options. Source-v8 addresses
+both presentation issues: the custom Play style now respects `isEnabled`, the
+disabled control reads `SSD unavailable` with a drive-warning icon, and storage
+options is a separate borderless button/sheet instead of a NavigationLink that
+can capture the surrounding Form row. Check connection is also borderless.
+No storage routing, graphics or JIT behaviour changed in this UI increment.
+All 65 Swift sources compiled/linked and the source-v8 app signed successfully;
+build/provenance output is `/tmp/madeira-ssd-source-v8`. Installation is waiting
+for confirmation that the test app is closed, to avoid interrupting gameplay.
+
 The first Brotato SSD install attempt in source-v2 stopped at the capacity gate:
 the user reported 0.2 GB required and 0.0 GB available. A read-only inspection of
 the disposable app's catalog confirmed the registered external destination;
