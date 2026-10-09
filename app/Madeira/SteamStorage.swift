@@ -34,6 +34,23 @@ enum SteamStorageCapacity {
     }
 }
 
+enum SteamStorageOperation {
+    /// A network/depot failure is not evidence that a healthy volume vanished.
+    /// Cancellation must not trigger another provider lookup or change availability.
+    static func run<Value>(_ operation: () async throws -> Value,
+                           validate: () async throws -> Void) async throws -> Value {
+        let value: Value
+        do { value = try await operation() }
+        catch {
+            if error is CancellationError { throw error }
+            try await validate()
+            throw error
+        }
+        try await validate()
+        return value
+    }
+}
+
 /// Persistent identity is independent of the removable volume's current mount path.
 struct SteamStorageLibrary: Codable, Equatable, Identifiable, Sendable {
     static let internalID = "internal"

@@ -842,6 +842,33 @@ func storageChecks() throws {
 }
 
 func storageAsyncChecks() async throws {
+    do {
+        let _: Int = try await SteamStorageOperation.run({ throw URLError(.notConnectedToInternet) }, validate: {})
+        require(false, "storage: network failure is preserved")
+    } catch let error as URLError {
+        require(error.code == .notConnectedToInternet, "storage: network failure stays a network failure on a healthy volume")
+    }
+    do {
+        let _: Int = try await SteamStorageOperation.run({ throw URLError(.networkConnectionLost) }, validate: {
+            throw SteamStorageError.unavailable(.disconnected)
+        })
+        require(false, "storage: missing volume wins over an operation failure")
+    } catch SteamStorageError.unavailable(.disconnected) {
+        require(true, "storage: disconnected volume gives reconnect guidance")
+    }
+    var cancellationValidated = false
+    do {
+        let _: Int = try await SteamStorageOperation.run({ throw CancellationError() }, validate: { cancellationValidated = true })
+        require(false, "storage: cancellation is preserved")
+    } catch is CancellationError {
+        require(!cancellationValidated, "storage: cancellation never probes or marks the volume disconnected")
+    }
+    do {
+        let _: Int = try await SteamStorageOperation.run({ 1 }, validate: { throw SteamStorageError.unavailable(.identityMismatch) })
+        require(false, "storage: successful work still validates its destination")
+    } catch SteamStorageError.unavailable(.identityMismatch) {
+        require(true, "storage: replaced destination cannot publish a successful operation")
+    }
     let normal = SteamStorageAsyncWork<Int>()
     let value = try await Task.detached { try normal.execute { 73 } }.value
     require(value == 73, "storage: async operation finishes before accessor returns")

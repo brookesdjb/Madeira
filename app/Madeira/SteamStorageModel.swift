@@ -134,21 +134,21 @@ import UniformTypeIdentifiers
                                  _ operation: @escaping @Sendable (URL) async throws -> Value) async throws -> Value {
         _ = try library(libraryID)
         if libraryID == SteamStorageLibrary.internalID { return try await operation(MadeiraDock.drive) }
-        do {
-            let access = try await acquire(libraryID: libraryID, write: write)
-            defer { access.keepAlive() }
-            let value = try await operation(access.root)
-            // Do not publish a completed operation for a replaced/disappeared folder.
-            try await Task.detached(priority: .utility) { try access.validate() }.value
-            availability = access.writable ? .available : .readOnly
-            problem = access.writable ? nil : SteamStorageError.unavailable(.readOnly).localizedDescription
-            return value
-        } catch {
-            liveAccess = nil
-            availability = SteamExternalAccess.availability(for: error)
-            problem = SteamStorageError.unavailable(availability).localizedDescription
-            if error is CancellationError { throw error }
-            throw SteamStorageError.unavailable(availability)
+        guard let access = try await accessForOperation(libraryID: libraryID, write: write) else { throw SteamStorageError.invalidRecord }
+        defer { access.keepAlive() }
+        return try await SteamStorageOperation.run({ try await operation(access.root) }) {
+            // Only a failed volume check changes library availability. Keep the
+            // original download error when the selected volume is still present.
+            do {
+                try await Task.detached(priority: .utility) { try access.validate() }.value
+                availability = access.writable ? .available : .readOnly
+                problem = access.writable ? nil : SteamStorageError.unavailable(.readOnly).localizedDescription
+            } catch {
+                liveAccess = nil
+                availability = SteamExternalAccess.availability(for: error)
+                problem = SteamStorageError.unavailable(availability).localizedDescription
+                throw SteamStorageError.unavailable(availability)
+            }
         }
     }
 
@@ -188,8 +188,8 @@ import UniformTypeIdentifiers
             problem = nil
             return access
         } catch {
-            liveAccess = nil
             if error is CancellationError { throw error }
+            liveAccess = nil
             availability = SteamExternalAccess.availability(for: error)
             problem = SteamStorageError.unavailable(availability).localizedDescription
             throw SteamStorageError.unavailable(availability)
