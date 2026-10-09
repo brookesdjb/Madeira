@@ -271,22 +271,20 @@ import UniformTypeIdentifiers
     }
 
     /// Visible foreground cards must notice removal even when a paused transfer
-    /// performs no I/O. Retain access between checks, then release it on dismissal,
-    /// backgrounding or failure. Reconnection remains an explicit check.
+    /// performs no I/O. Scope each check; an idle card must not hold a coordinated
+    /// writer open while a folder picker tries to reauthorize the same library.
+    /// Downloads/sessions retain their own leases. Reconnection is explicit.
     func monitorAvailability(libraryID: String) async {
         guard libraryID != SteamStorageLibrary.internalID else { return }
-        var access: SteamExternalLease?
-        defer { access?.keepAlive() }
         while !Task.isCancelled, catalog.external?.id == libraryID {
             if availability == .available || availability == .readOnly {
-                do { access = try await accessForOperation(libraryID: libraryID, write: false) }
-                catch { access = nil }
-            } else {
-                access = nil
+                do {
+                    let access = try await accessForOperation(libraryID: libraryID, write: false)
+                    access?.keepAlive()
+                } catch { }
             }
             do { try await Task.sleep(nanoseconds: 2_000_000_000) }
             catch { return }
-            access?.keepAlive()
         }
     }
 
