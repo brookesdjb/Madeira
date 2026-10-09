@@ -2972,7 +2972,12 @@ struct LibraryDetail: View {
                             .buttonStyle(LibraryPlayStyle(pending: leaving))
                             .disabled(leaving || (entry.storageID != "internal" && storage.availability != .available))
                             if entry.storageID != "internal", storage.availability != .available {
-                                Button("Check SSD connection") { Task { await storage.check() } }
+                                Button { Task { await storage.check() } } label: {
+                                    HStack {
+                                        if storage.checking { ProgressView() }
+                                        Text(storage.checking ? "Checking SSD…" : "Check SSD connection")
+                                    }
+                                }.disabled(storage.checking)
                                 Text(storage.problem ?? "Reconnect the SSD before playing.").font(.footnote)
                                 NavigationLink("Reconnect SSD folder") { SteamStorageSettings() }
                             }

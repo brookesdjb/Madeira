@@ -7,7 +7,7 @@ fullscreen after tapping the game, and gameplay appeared normal. This records th
 observed focus behaviour without changing graphics or JIT settings. The live
 numeric Dock report independently confirmed `session-requested-app-listed=1`,
 `launch-install-directory-verified=1`, `launch-client-error=0` and
-`launch-game-running=1`. Restart/reconnect, save continuity and the remaining
+`launch-game-running=1`. Reconnect/relaunch also passed on source-v6. Save continuity and the remaining
 physical matrix for [issue 131](https://github.com/willfaust/Madeira/issues/131)
 are still outstanding. The working original app remains separate.
 
@@ -32,6 +32,28 @@ The 65-source mixed build compiled, linked and signed successfully at
 `/tmp/madeira-ssd-source-v6` (with provenance) and installed after the user
 confirmed the test app was closed. It was left closed for the requested
 unplug/open/reconnect/check-connection test.
+
+The user confirmed source-v6 recovered successfully in that sequence, without
+reporting another restart, folder selection or cloud bypass. The first connection
+check appeared to pause or ignore the tap; a second tap confirmed immediately.
+Gameplay resumed after an approximately 30-second windowed splash pause. Save
+continuity was checked separately: the user reported that it appears to have
+loaded the existing save. This is user-observed continuity, not a byte-level save
+comparison or cloud upload verification. The launch log
+shows Play at 18:53:11, online authentication at 18:53:19, entitlement at 18:53:24
+and client launch error 0 at 18:53:26; this explains roughly 15 seconds of startup,
+not the entire user-observed splash pause. It does not establish an SSD-specific
+graphics or performance regression.
+
+Source-v7 adds observable connection-check progress and suppresses duplicate
+checks. Marker/read-only validation after acquiring access and the final marker
+verification now run on a utility task, retaining the lease, instead of doing
+removable-filesystem I/O on the UI actor. The check logs only availability and
+elapsed milliseconds. No graphics/JIT settings were changed. All 65 Swift sources
+compiled and linked successfully; source-v7 was signed, installed after the user
+confirmed the test app was closed, and launched. Build/provenance output is
+`/tmp/madeira-ssd-source-v7`. On-device responsiveness of the check remains to be
+confirmed; the reconnect and save observations above were on source-v6.
 
 The first Brotato SSD install attempt in source-v2 stopped at the capacity gate:
 the user reported 0.2 GB required and 0.0 GB available. A read-only inspection of
@@ -281,7 +303,7 @@ This does not patch the native binary. Direct external 32-bit starts are refused
 in this build because its old PE probe cannot inspect E:. The native source fix
 is host-tested and syntax-checked, not linked into the published runtime.
 
-Still required: direct Brotato gameplay, restart/reconnect launches, download unplug/resume,
+Still required: direct Brotato gameplay, save continuity after reconnect, download unplug/resume,
 background/foreground/cancel, low-space/read-only, >4 GiB, APFS/exFAT where
 available. Before/after internal growth is recorded above. File-presenter relinquishment under
 other coordinated clients remains unverified. The test app's pre-download

@@ -13,6 +13,7 @@ import UniformTypeIdentifiers
     @Published private(set) var catalog = SteamStorageCatalog()
     @Published private(set) var availability: SteamStorageAvailability = .disconnected
     @Published private(set) var problem: String?
+    @Published private(set) var checking = false
     private var loadFailure: Error?
     private weak var liveAccess: SteamExternalLease?
     private var opening: Task<SteamExternalLease, Error>?
@@ -138,7 +139,7 @@ import UniformTypeIdentifiers
             defer { access.keepAlive() }
             let value = try await operation(access.root)
             // Do not publish a completed operation for a replaced/disappeared folder.
-            try SteamStorageIdentity.verify(libraryID, root: access.root)
+            try await Task.detached(priority: .utility) { try access.validate() }.value
             availability = access.writable ? .available : .readOnly
             problem = access.writable ? nil : SteamStorageError.unavailable(.readOnly).localizedDescription
             return value
@@ -166,11 +167,14 @@ import UniformTypeIdentifiers
         }
         guard access.library.id == libraryID else { throw SteamStorageError.unavailable(.identityMismatch) }
         try Task.checkCancellation()
-        try SteamStorageIdentity.verify(libraryID, root: access.root)
-        if write {
-            let readOnly = try access.root.resourceValues(forKeys: [.volumeIsReadOnlyKey]).volumeIsReadOnly
-            guard access.writable, readOnly != true else { throw SteamStorageError.unavailable(.readOnly) }
-        }
+        try await Task.detached(priority: .utility) {
+            try access.validate()
+            if write {
+                let readOnly = try access.root.resourceValues(forKeys: [.volumeIsReadOnlyKey]).volumeIsReadOnly
+                guard access.writable, readOnly != true else { throw SteamStorageError.unavailable(.readOnly) }
+            }
+        }.value
+        try Task.checkCancellation()
         if access.library != catalog.external { try catalog.transaction(file: Self.file) { try $0.register(access.library) } }
         return access
     }
@@ -267,7 +271,14 @@ import UniformTypeIdentifiers
     }
 
     func check() async {
-        guard let external = catalog.external else { return }
+        guard !checking, let external = catalog.external else { return }
+        checking = true
+        let started = ProcessInfo.processInfo.systemUptime
+        defer {
+            checking = false
+            let elapsed = Int((ProcessInfo.processInfo.systemUptime - started) * 1000)
+            SteamLog.event("[steam-storage] check state=\(availability.rawValue) elapsed-ms=\(elapsed)")
+        }
         do {
             _ = try await perform(libraryID: external.id, write: true) { _ in true }
             SteamOwnedLibrary.shared.storageReconnected(external.id)
@@ -291,7 +302,12 @@ struct SteamStorageSettings: View {
                     Label(external.name, systemImage: "externaldrive")
                     Text(storage.problem ?? (storage.availability == .available ? "Connected" : "Reconnect the SSD to use this library."))
                         .font(.footnote).foregroundStyle(.secondary)
-                    Button("Check connection") { Task { await storage.check() } }.disabled(busy)
+                    Button { Task { await storage.check() } } label: {
+                        HStack {
+                            if storage.checking { ProgressView() }
+                            Text(storage.checking ? "Checking SSD…" : "Check connection")
+                        }
+                    }.disabled(busy || storage.checking)
                 }
                 Button(storage.catalog.external == nil ? "Choose SSD library folder" : "Reauthorize the same folder") { picking = true }
                     .disabled(busy)
