@@ -713,3 +713,11 @@ idle-monitor lifetime review. Source-v13 supersedes it with that last change;
 neither build was installed during the owner's absence. The installed app remains
 source-v11, and no physical gameplay or current card-refresh result is claimed
 from these host tests.
+
+Final prepared build: source-v13 compiled and linked all 65 Swift sources, passed
+strict/deep code-signature verification, and its provenance hashes match every
+current Swift source. Build/provenance directory: `/tmp/madeira-ssd-source-v13`.
+The pinned runtime SHA-256 remains
+`d942617b44d57bb23b3e97dce87cf5272265e239dc5d6434dac11030341d6446`.
+Source-v13 is not installed; source-v11 and its paused transfer remain on the
+owner's iPad. No test disk image remains attached after the host filesystem runs.
