@@ -6,6 +6,24 @@ The first physical Steam download and gameplay checks for
 [issue 131](https://github.com/willfaust/Madeira/issues/131) are pending.
 Host success and installation are not claims of user-confirmed SSD gameplay.
 
+The first Brotato SSD install attempt in source-v2 stopped at the capacity gate:
+the user reported 0.2 GB required and 0.0 GB available. A read-only inspection of
+the disposable app's catalog confirmed the registered external destination;
+the attempt had not silently selected internal storage. Source-v3 replaces the
+single important-usage capacity query with `SteamStorageCapacity`, shared by the
+downloader and free-space UI. When important-usage capacity is zero or absent,
+it queries ordinary volume capacity and filesystem free bytes at the same scoped
+destination. True zero still blocks installation; unavailable capacity throws
+instead of becoming unlimited space. Regression checks cover these cases and a
+real host-volume query. Device retry remains required to confirm this fixes the
+reported SSD result. Apple's capacity properties are documented at
+https://developer.apple.com/documentation/foundation/urlresourcevalues/volumeavailablecapacityforimportantusage.
+Source-v3 compiled and linked all 65 Swift sources against the preserved runtime,
+was signed, installed over the disposable test app, and launched successfully.
+Its build/provenance output is `/tmp/madeira-ssd-source-v3`; host library and games
+suites passed under AddressSanitizer, and the iOS source type-check passed.
+The user has been asked to retry the existing SSD download.
+
 ## Source and build baseline
 
 Work started from clean `local/opengl-225` at

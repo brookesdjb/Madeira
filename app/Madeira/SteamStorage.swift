@@ -4,6 +4,33 @@
 
 import Foundation
 
+/// Query the actual destination while its security scope is held. Some volumes
+/// report zero for important-usage capacity despite having ordinary free space.
+enum SteamStorageCapacity {
+    nonisolated static func resolve(important: Int64?, ordinary: Int64?, filesystem: Int64?) throws -> Int64 {
+        let known = [important, ordinary, filesystem].compactMap { $0 }.filter { $0 >= 0 }
+        guard let available = known.max() else { throw CocoaError(.fileReadUnknown) }
+        return available
+    }
+
+    nonisolated static func availableBytes(at destination: URL) throws -> Int64 {
+        // Start with a fresh URL so a previous capacity observation is not cached.
+        let url = URL(fileURLWithPath: destination.path)
+        var important: Int64?
+        #if canImport(Darwin)
+        important = (try? url.resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey]))?
+            .volumeAvailableCapacityForImportantUsage
+        #endif
+        if let important, important > 0 { return important }
+        let ordinary = (try? url.resourceValues(forKeys: [.volumeAvailableCapacityKey]))?
+            .volumeAvailableCapacity.map { Int64($0) }
+        let attributes = try? FileManager.default.attributesOfFileSystem(forPath: url.path)
+        let filesystem = (attributes?[.systemFreeSize] as? NSNumber)?.int64Value
+        // A genuine zero remains zero. Failed queries never become unlimited space.
+        return try resolve(important: important, ordinary: ordinary, filesystem: filesystem)
+    }
+}
+
 /// Persistent identity is independent of the removable volume's current mount path.
 struct SteamStorageLibrary: Codable, Equatable, Identifiable, Sendable {
     static let internalID = "internal"

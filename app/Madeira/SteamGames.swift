@@ -940,7 +940,7 @@ struct SteamGameSheet: View {
             .task(id: destinationID + String(describing: steam.downloads[appID]?.state)) {
                 partial = steam.hasPartialDownload(appID)
                 freeSpace = try? await storage.perform(libraryID: destinationID, write: false) { root in
-                    try root.resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey]).volumeAvailableCapacityForImportantUsage
+                    try SteamStorageCapacity.availableBytes(at: root)
                 }
             }
             .confirmationDialog("Cancel this download? Downloaded files are deleted.", isPresented: $confirmCancel, titleVisibility: .visible) {
@@ -1281,7 +1281,7 @@ struct SteamEntrySection: View {
         .onAppear { dock.refresh(); games.refresh() }
         .task(id: download?.state) {
             freeSpace = try? await SteamStorageModel.shared.perform(libraryID: entry.storageID, write: false) { root in
-                try root.resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey]).volumeAvailableCapacityForImportantUsage
+                try SteamStorageCapacity.availableBytes(at: root)
             }
         }
         .task(id: "\(entry.steamStart ?? "dock") \(installed?.installed == true) \(download == nil)") { await resolveProgram() }

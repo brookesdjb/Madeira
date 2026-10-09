@@ -155,8 +155,7 @@ final class DepotDownloader {
 
         let remaining = prepared.remainingUncompressed
         if remaining > 0 {
-            let values = try? installURL.resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey])
-            let available = UInt64(max(0, values?.volumeAvailableCapacityForImportantUsage ?? Int64.max))
+            let available = UInt64(try SteamStorageCapacity.availableBytes(at: installURL))
             if available < remaining { throw SteamError.insufficientDiskSpace(needed: remaining, available: available) }
         }
 

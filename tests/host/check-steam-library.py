@@ -678,10 +678,19 @@ func packageBuffer(apps: [UInt32], depots: [UInt32]) -> Data {
 
 
 func storageChecks() throws {
+    require((try? SteamStorageCapacity.resolve(important: 0, ordinary: 4_000_000_000, filesystem: 4_000_000_000)) == 4_000_000_000,
+            "storage: zero important capacity falls back to real free bytes")
+    require((try? SteamStorageCapacity.resolve(important: nil, ordinary: nil, filesystem: 8_000_000_000)) == 8_000_000_000,
+            "storage: filesystem capacity supports volumes without URL capacity keys")
+    require((try? SteamStorageCapacity.resolve(important: 0, ordinary: 0, filesystem: 0)) == 0,
+            "storage: genuinely full volume remains full")
+    require((try? SteamStorageCapacity.resolve(important: nil, ordinary: -1, filesystem: nil)) == nil,
+            "storage: unknown capacity is not unlimited space")
     let fm = FileManager.default
     let base = fm.temporaryDirectory.appendingPathComponent("madeira-storage-" + UUID().uuidString)
     try fm.createDirectory(at: base, withIntermediateDirectories: false)
     defer { try? fm.removeItem(at: base) }
+    require((try? SteamStorageCapacity.availableBytes(at: base)) != nil, "storage: real destination capacity is queried on the host")
     let external = base.appendingPathComponent("SSD")
     try fm.createDirectory(at: external, withIntermediateDirectories: false)
     let id = try SteamStorageIdentity.register(root: external)
@@ -1182,12 +1191,7 @@ dock_body = (dock[dock.index('enum MadeiraDock {'):dock.index('    @MainActor pr
              dock[dock.index("    /// The host's environment for one launch."):])
 # URLSession lives in FoundationNetworking on Linux; the production file imports Foundation only.
 downloader_host = downloader.replace('import Foundation\n', 'import Foundation\n#if canImport(FoundationNetworking)\nimport FoundationNetworking\n#endif\n', 1)
-# The free-space query is Darwin's (volumeAvailableCapacityForImportantUsage); the host has none, so the check is skipped there.
-space = ('let values = try? installURL.resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey])\n'
-         '            let available = UInt64(max(0, values?.volumeAvailableCapacityForImportantUsage ?? Int64.max))')
-assert space in downloader_host
-if sys.platform != "darwin":
-    downloader_host = downloader_host.replace(space, 'let available = UInt64.max')
+# SteamStorageCapacity performs a real destination-volume query on both hosts.
 fetcher_source = sources['SwiftSteam/Library/SteamLibraryFetcher.swift']
 
 work = Path(tempfile.mkdtemp(prefix='madeira-steam-library-'))
