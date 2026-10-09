@@ -13,7 +13,7 @@ struct SteamStorageProbeView: View {
     @State private var largeFile = false
     @State private var status = "Choose a dedicated folder on the attached SSD. This prototype tests data access, not game execution."
 
-    private static var record: URL {
+    nonisolated private static var record: URL {
         FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("external-library-prototype.json")
     }

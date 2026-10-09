@@ -1,7 +1,7 @@
 # External SSD implementation record
 
-Status on 2026-10-09: **data-access prototype verified on an iPad; external
-Windows execution and the integrated external game library remain unimplemented.**
+Status on 2026-10-09: **data access and a controlled external EXE/DLL/asset/save fixture verified
+on an iPad; the integrated external game library remains unimplemented.**
 This is a first increment for [issue 131](https://github.com/willfaust/Madeira/issues/131),
 not a claim that games can yet install or run from an SSD.
 
@@ -134,7 +134,8 @@ folder selection. It imports no copy of the folder.
 | First SSD test | User reported PASS on physical iPad: bookmark resolve plus data operations |
 | Restart/unplug/reconnect | User explicitly confirmed FAIL unplugged, PASS reconnected without selecting the folder again |
 | Full Madeira app | Build blocked by missing resources/native inputs; no new app installed |
-| External Windows EXE/DLL, Dock, Brotato | NOT TESTED |
+| External Windows EXE/DLL + relative asset/save | PASS in the isolated prebuilt-runtime harness, confirmed by the user |
+| Dock and Brotato from SSD | NOT TESTED |
 
 The Wine resolver input can be reproduced without initializing all of Wine:
 
@@ -176,3 +177,29 @@ resolution that cannot interpret missing storage as deleted saves; disconnect
 recovery and the complete physical-device matrix. Existing games and queues
 remain internal. The prototype never silently redirects an SSD operation into
 internal storage.
+
+## Follow-up: isolated reuse of the published runtime
+
+The owner confirmed that only the checkout and published IPA are available.
+A narrower route was then built: [the SSD runtime harness](../tests/device/ssd-runtime/README.md)
+loads the hash-pinned published app runtime through its exported original entry
+point and adds a source-built folder-access overlay. It uses a distinct app
+container and signing profile; no runtime/JIT/graphics code is patched. This
+removes the full-source-build dependency for the execution experiment only.
+The preserved working runtime's hash was rechecked and remains unchanged.
+
+The pinned llvm-mingw archive was downloaded and verified successfully, so that
+toolchain is now present locally. The controlled EXE imports a companion DLL,
+reads a relative asset and writes/renames/reopens a save beside its executable.
+Its only other dependency is KERNEL32. Two builds in different output directories
+produced identical fixture bytes. All 64 production Swift sources still
+pass the iOS type-check after making the probe's pure file-path property
+explicitly nonisolated.
+
+The initial shell-based runtime test failed internally because the supplied
+IPA's `cmd.exe` is ARM64-native but the harness selected ARM64EC libraries;
+`kernel32.dll` failed with `c000007b`. The corrected fixture launches directly
+from E:. The corrected signed app is installed and launched. The user confirmed its
+PASS result: the external EXE and DLL loaded, the relative asset matched, and
+the beside-executable save was written, renamed, reopened and verified. This is a prebuilt-runtime
+experiment, not a successful full source app build or completed SSD support.
