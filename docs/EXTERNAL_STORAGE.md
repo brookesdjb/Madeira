@@ -4,8 +4,10 @@
 
 - **Installed and launched:** source-v13 in the isolated Madeira SSD Library app,
   after the owner requested the update. Device installation and launch commands
-  both succeeded. Its live removal check while a card stays open still needs
-  the owner test.
+  both succeeded. The owner confirmed all four paused-download checks passed:
+  Resume disables after unplugging with the card open; reconnect and Check SSD
+  connection restore Resume; downloading resumes; and the downloaded amount
+  and Resume remain visible after pausing, closing and reopening the app.
 - **Installed artifact:** source-v13 at
   `/tmp/madeira-ssd-source-v13/MadeiraSSDRuntime.app`, with source/native
   provenance. All 65 compiled Swift source hashes match the current checkout.
@@ -15,8 +17,8 @@
 - **User-confirmed gameplay:** Brotato and Borderlands GOTY from the SSD;
   Borderlands recovered from an interrupted download. The test app retains the
   owner's `MADEIRA_WOW_SMALL_VA_SLOTS=4` setting. The original app was not changed.
-- **Still unverified:** current card refresh and resumed-count presentation,
-  physical background/foreground interruption, direct game launch, live cloud
+- **Still unverified:** pause during local-file verification,
+  physical background/foreground interruption of an active transfer, direct game launch, live cloud
   upload/conflict continuity, physical read-only/low-space/large-file and format
   combinations. Desktop visibility during startup remains unexplained. The
   DirectX prerequisite returned a failure despite Borderlands gameplay working.
@@ -27,15 +29,17 @@
 
 Next owner checks, in order:
 
-1. On installed source-v13, keep a paused game's card open, unplug the SSD and
-   allow a few seconds for Resume to disable. Reconnect, Check SSD connection,
-   then resume in the same card.
-2. Confirm downloaded/total counts survive pause, app close and reopen. A
-   read-only catalog inspection already confirms a persisted SSD progress
-   snapshot of 2,958,112,528 / 29,870,931,248 bytes for the pending transfer; this
-   is persisted-state evidence, not UI acceptance.
-3. Then check pause/resume during local-file verification and a normal SSD game
-   launch with the existing saves. Remaining failure-matrix tests follow later.
+1. Resume the paused transfer and, if local-file verification lasts long enough,
+   pause during verification. Confirm it stops and can resume again. The owner
+   passing the four preceding checks does not establish cancellation during
+   verification specifically.
+2. Finish the transfer and check a normal SSD game launch with the existing saves.
+   Remaining failure-matrix tests follow later.
+
+The source-v13 owner report was "yes that all passes" in response to the four
+explicit checks above. This supplies UI acceptance for progress persistence,
+in addition to the earlier read-only catalog snapshot of
+2,958,112,528 / 29,870,931,248 bytes for the pending transfer.
 
 The sections below are the chronological implementation and evidence ledger;
 older "pending" statements describe the stage at which they were recorded.
