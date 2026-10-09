@@ -498,7 +498,8 @@ SSD download passed on iPad. The preserved binary's Valve client rejected E:
 as unmounted and Dock returned 41. The mixed-source diagnostic build therefore
 registers the scoped `C:\MadeiraExternalLibrary` alias and passes that identical
 install path to Dock. The path check and Valve's licence/authentication gates
-are unchanged; no game payload is copied internally. Full-source native E:
-client registration, actual gameplay through the alias, and one-time installer
-execution still need physical validation. See [EXTERNAL_STORAGE.md](EXTERNAL_STORAGE.md)
+are unchanged; no game payload is copied internally. The user confirmed gameplay
+through the alias; Dock reported the expected install verified, client error 0
+and game running. Full-source native E: client registration, restart/reconnect,
+and one-time installer execution still need physical validation. See [EXTERNAL_STORAGE.md](EXTERNAL_STORAGE.md)
 for the mixed-source build's native-bridge limitations and validation ledger.

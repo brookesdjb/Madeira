@@ -443,7 +443,8 @@ and transfer before missing files can be acknowledged as deletions.
 
 See [EXTERNAL_STORAGE.md](EXTERNAL_STORAGE.md) for exact build/provenance and
 validation. The source integration is installed in an isolated diagnostic app;
-controlled external execution and host integration pass, but Steam download,
-Brotato gameplay and the physical failure matrix are still pending. The mixed
-build uses a prebuilt native runtime and a C: compatibility alias for the direct
-launch working directory; it is not a full native source build.
+controlled external execution, Steam SSD download and Brotato gameplay through
+Dock have passed. The remaining physical failure matrix is still pending. The
+mixed build uses a prebuilt native runtime and a scoped C: compatibility alias
+for Valve's library registration, Dock's expected path and direct-launch working
+directory; it is not a full native source build.
