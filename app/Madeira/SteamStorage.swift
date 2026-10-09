@@ -108,6 +108,13 @@ struct SteamStorageAssignment: Codable, Equatable, Sendable {
     /// Optional for catalogs written before queue-state persistence. A paused
     /// update remains pending even though its old install record still exists.
     var pending: Bool?
+    /// Display snapshot only; the downloader still verifies its SSD journals on resume.
+    var transferProgress: SteamStorageTransferProgress?
+}
+
+struct SteamStorageTransferProgress: Codable, Equatable, Sendable {
+    let doneBytes: UInt64
+    let totalBytes: UInt64
 }
 
 /// Metadata stays internal so unavailable games and partial downloads remain
@@ -140,6 +147,10 @@ struct SteamStorageCatalog: Codable, Equatable {
         }
         var next = assignment
         if next.pending == nil { next.pending = assignments[assignment.appID]?.pending }
+        if next.pending == true, next.transferProgress == nil {
+            next.transferProgress = assignments[assignment.appID]?.transferProgress
+        }
+        if next.pending == false { next.transferProgress = nil }
         assignments[assignment.appID] = next
     }
 

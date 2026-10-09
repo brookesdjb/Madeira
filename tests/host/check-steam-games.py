@@ -74,11 +74,19 @@ require('LibraryModel.shared.removeSteam(appID: game.id)' in owned_source[owned_
         "Uninstall removes the game's library entry with its files")
 detail = library[library.index('struct LibraryDetail: View {'):library.index('struct FPSChoice: View {')]
 steam_section = games[games.index('struct SteamEntrySection'):]
+require('@ObservedObject private var steam = SteamOwnedLibrary.shared' in detail and
+        detail.index('let download = steam.downloads[appID]') < detail.index('Button(action: start)') and
+        'SteamTransferControls(appID: appID, download: download,' in detail and
+        'SteamDownloadStatus(download: download)' in detail,
+        'Game details observes transfers and replaces Play with transfer controls and progress')
+require('SteamTransferControls(appID: appID, download: download, storageUnavailable: storageUnavailable)' in steam_section,
+        'Steam section shares transfer controls with the header')
+
 require('SteamEntrySection(entry: $entry)' in detail and 'if entry.steamAppID != nil {' in detail,
         'Game details: the Steam section for a Steam game')
 for label in ['"Start with"', '"Madeira Dock"', '"Smaller JIT pool (512 MB) for this launch"', '"One-time installs"',
               '"Run at next start"', '"Skip"', '"Repair installed files"', '"Uninstall"', '"App ID"',
-              '"Free space in game library"', '"Pause update"', '"Resume update"', '"The game"', '"Program"', '"Choose…"']:
+              '"Free space in game library"', '"The game"', '"Program"', '"Choose…"']:
     require(label in steam_section, f'Steam section: {label}')
 for label in ['"Library details"', '"Choose cover image"', '"Use Steam artwork"', '"Display"', '"Resolution"',
               '"Aspect & scaling"', '"Compatibility & performance"', '"Reduced-precision x87"', '"CPU cores reported"',

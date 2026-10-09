@@ -746,15 +746,22 @@ func storageChecks() throws {
     let updatingFile = base.appendingPathComponent("updating.json")
     var update = assignment
     update.installed = true; update.pending = true
+    update.transferProgress = SteamStorageTransferProgress(doneBytes: 248_000_000, totalBytes: 1_000_000_000)
     try updating.transaction(file: updatingFile) { try $0.assign(update) }
     // Discovery may still see the old complete manifest during a paused update.
-    var scanned = update; scanned.pending = nil
+    var scanned = update; scanned.pending = nil; scanned.transferProgress = nil
     try updating.transaction(file: updatingFile) { try $0.assign(scanned) }
     require((try? SteamStorageCatalog.load(from: updatingFile))?.assignments[55]?.pending == true,
             "storage: paused update survives restart and old-manifest discovery")
+    require((try? SteamStorageCatalog.load(from: updatingFile))?.assignments[55]?.transferProgress == update.transferProgress,
+            "storage: paused byte counts survive restart and manifest rediscovery")
+    require(initialCatalog.assignments[55]?.transferProgress == nil,
+            "storage: catalogs without transfer snapshots remain readable")
     update.pending = false
     try updating.transaction(file: updatingFile) { try $0.assign(update) }
     require(updating.assignments[55]?.pending == false, "storage: successful completion explicitly clears pending state")
+    require(updating.assignments[55]?.transferProgress == nil,
+            "storage: successful completion clears obsolete transfer progress")
     try Data("broken".utf8).write(to: catalogURL)
     require((try? SteamStorageCatalog.load(from: catalogURL)) == nil, "storage: corrupt catalog never resets into an internal fallback")
     try JSONEncoder().encode(catalog).write(to: catalogURL)

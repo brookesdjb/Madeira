@@ -2897,6 +2897,7 @@ struct LibraryDetail: View {
     @Environment(\.dismiss) private var dismiss
     @ObservedObject private var model = LibraryModel.shared
     @ObservedObject private var storage = SteamStorageModel.shared
+    @ObservedObject private var steam = SteamOwnedLibrary.shared
     @State private var showStorage = false
     @State private var importCover = false
     @State private var findCover = false
@@ -2961,6 +2962,11 @@ struct LibraryDetail: View {
                             if DockOffline.enabled, let appID = entry.steamAppID, !entry.startsSteamGameDirectly {
                                 DockOfflineMark(appID: appID)
                             }
+                            if let appID = entry.steamAppID, let download = steam.downloads[appID] {
+                                SteamTransferControls(appID: appID, download: download,
+                                    storageUnavailable: entry.storageID != "internal" && storage.availability != .available)
+                                SteamDownloadStatus(download: download)
+                            } else {
                             Button(action: start) {
                                 HStack(spacing: 10) {
                                     // Enabling JIT can take seconds with nothing else on screen.
@@ -2977,6 +2983,7 @@ struct LibraryDetail: View {
                             }
                             .buttonStyle(LibraryPlayStyle(pending: leaving))
                             .disabled(leaving || (entry.storageID != "internal" && storage.availability != .available))
+                            }
                             if entry.storageID != "internal", storage.availability != .available {
                                 Button { Task { await storage.check() } } label: {
                                     HStack {

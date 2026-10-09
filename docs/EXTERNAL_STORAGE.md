@@ -481,3 +481,26 @@ the app and verify Resume remains available instead of a misleading Play/Open
 action. With that transfer paused, unplug the SSD and verify the download sheet
 provides connection recovery and blocks resume until the library is available;
 reconnect, check connection and resume the existing transfer.
+
+## Source-v10: game-details transfer controls and retained byte counts
+
+The source-v9 owner check exposed a separate route: the home card said Paused,
+but the installed game's details header still offered Play and its Steam section
+said Resume update. After reopening, no transferred byte counts were displayed.
+The earlier sheet fix did not cover the LibraryDetail header.
+
+LibraryDetail now observes download changes and replaces Play with shared
+Pause download / Resume download / Retry download controls while a transfer
+exists. The header also displays progress; its Steam section uses the same
+controls. Both respect unavailable storage for resume/retry. Paused progress
+includes completed and total bytes. A catalog display snapshot is saved at most
+every five seconds during progress and again when a transfer stops, restored
+on app startup, preserved during install rediscovery and cleared on completion.
+SSD journals and chunk verification remain authoritative for actual resume.
+Older paused records have no snapshot: they explicitly ask to resume to check
+downloaded files; they do not show a fabricated amount.
+
+Production host games and library checks passed under AddressSanitizer,
+including snapshot persistence through restart/rediscovery and cleanup on
+completion. The owner confirmed the app is closed with its download paused for
+replacement. Device build and acceptance are tracked below.

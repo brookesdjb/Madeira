@@ -246,7 +246,12 @@ final class SteamOwnedLibrary: ObservableObject {
         guard Self.enabled, !started else { return }
         started = true
         for assigned in SteamStorageModel.shared.catalog.assignments.values where assigned.pending == true {
-            downloads[assigned.appID] = Download(state: .paused)
+            var download = Download(state: .paused)
+            if let snapshot = assigned.transferProgress {
+                download.progress.totalBytes = snapshot.totalBytes
+                download.progress.doneBytes = min(snapshot.doneBytes, snapshot.totalBytes)
+            }
+            downloads[assigned.appID] = download
         }
         NotificationCenter.default.addObserver(forName: SteamSignIn.didChange, object: nil, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated { self?.signInChanged() }
@@ -1132,6 +1137,23 @@ final class SteamOwnedLibrary: ObservableObject {
         active = (appID, task)
     }
 
+    private var progressSavedAt: [Int: Date] = [:]
+
+    private func saveTransferProgress(_ appID: Int, force: Bool = false) {
+        guard let progress = downloads[appID]?.progress, progress.totalBytes > 0,
+              var assigned = SteamStorageModel.shared.catalog.assignments[appID], assigned.pending == true else { return }
+        let now = Date()
+        guard force || now.timeIntervalSince(progressSavedAt[appID] ?? .distantPast) >= 5 else { return }
+        assigned.transferProgress = SteamStorageTransferProgress(doneBytes: min(progress.doneBytes, progress.totalBytes), totalBytes: progress.totalBytes)
+        do {
+            try SteamStorageModel.shared.record(assigned)
+            progressSavedAt[appID] = now
+        } catch {
+            // This display snapshot is not the downloader's authoritative journal.
+            SteamLog.event("[steam-depot] progress-snapshot-save-failed app=\(appID)")
+        }
+    }
+
     private func run(_ appID: Int) async {
         var outcome = SteamDownloadBackground.Outcome.paused
         do {
@@ -1151,6 +1173,7 @@ final class SteamOwnedLibrary: ObservableObject {
                 _ = try await downloader.install(info, steamApps: apps,
                     ownedDepots: { [weak self] in try? await self?.fetcher.ownedDepotIDs() }) { [weak self] progress in
                         self?.downloads[appID]?.progress = progress
+                        self?.saveTransferProgress(appID)
                         SteamDownloadBackground.shared.progress(progress)
                     }
                 return SteamInstallFiles.sizeOnDisk(appID: appID, steamApps: apps)
@@ -1177,6 +1200,8 @@ final class SteamOwnedLibrary: ObservableObject {
                 outcome = .failed(SteamSignIn.message(error))
             }
         }
+        saveTransferProgress(appID, force: true)
+        progressSavedAt[appID] = nil
         active = nil
         SteamDownloadBackground.shared.downloadEnded(appID: appID, name: game(appID)?.name ?? "Steam game",
                                                      outcome: outcome, queueEmpty: queue.isEmpty)

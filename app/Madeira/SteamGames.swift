@@ -838,7 +838,7 @@ struct SteamDownloadStatus: View {
         let p = download.progress
         switch download.state {
         case .queued: return "Waiting to start…"
-        case .paused: return p.totalBytes > 0 ? "Paused at \(Int(p.fraction * 100))%" : "Paused"
+        case .paused: return p.totalBytes > 0 ? "Paused at \(Int(p.fraction * 100))% · \(formatBytes(Int64(clamping: p.doneBytes))) of \(formatBytes(Int64(clamping: p.totalBytes)))" : "Paused — resume to check downloaded files"
         case .failed(let message): return message
         case .active:
             switch p.phase {
@@ -853,6 +853,28 @@ struct SteamDownloadStatus: View {
                 }
                 return parts.joined(separator: " · ")
             }
+        }
+    }
+}
+
+/// Shared by the game-details header and its Steam section.
+struct SteamTransferControls: View {
+    let appID: Int
+    let download: SteamOwnedLibrary.Download
+    let storageUnavailable: Bool
+    @ObservedObject private var steam = SteamOwnedLibrary.shared
+
+    var body: some View {
+        switch download.state {
+        case .active, .queued:
+            Button { steam.pause(appID) } label: { steamActionLabel("Pause download", symbol: "pause.fill") }
+                .buttonStyle(.bordered)
+        case .paused:
+            Button { steam.install(appID) } label: { steamActionLabel("Resume download", symbol: "arrow.down.circle.fill") }
+                .buttonStyle(.borderedProminent).disabled(!steam.signedIn || storageUnavailable)
+        case .failed:
+            Button { steam.install(appID) } label: { steamActionLabel("Retry download", symbol: "arrow.clockwise") }
+                .buttonStyle(.borderedProminent).disabled(!steam.signedIn || storageUnavailable)
         }
     }
 }
@@ -1262,10 +1284,7 @@ struct SteamEntrySection: View {
             }
             if let download {
                 SteamDownloadStatus(download: download)
-                switch download.state {
-                case .active, .queued: Button("Pause update") { steam.pause(appID) }
-                case .paused, .failed: Button("Resume update") { steam.install(appID) }.disabled(!steam.signedIn || storageUnavailable)
-                }
+                SteamTransferControls(appID: appID, download: download, storageUnavailable: storageUnavailable)
             } else if downloads, steam.updateAvailable(appID: appID, installedBuild: games.builds[appID]) {
                 Button { steam.install(appID) } label: { Label("Update available — download", systemImage: "arrow.down.circle") }
                     .disabled(!steam.signedIn || storageUnavailable)
