@@ -11,6 +11,28 @@ numeric Dock report independently confirmed `session-requested-app-listed=1`,
 physical matrix for [issue 131](https://github.com/willfaust/Madeira/issues/131)
 are still outstanding. The working original app remains separate.
 
+The first physical reconnect test exposed recovery failures: the library showed
+Connect SSD but still offered Play; a missing-provider error remained after
+reconnecting until app restart and folder reconnection. A failed cloud check
+then retained the same provider error, and Launch Anyway allowed gameplay.
+This is not a passed reconnect/save-continuity test. The user also reported the
+menu Exit action does not work in stock Madeira, requiring app close/reopen;
+that pre-existing issue is recorded separately and was not changed here.
+
+Source-v6 preserves the original picker bookmark unless resolution marks it
+stale, rather than rewriting it from every coordinated access URL. Invalid
+cached access is dropped; folder reauthorization resets the weak access cache.
+External launch paths validate storage before JIT/cloud prompts, Play is disabled
+when storage is known unavailable, and Game details offers Check SSD connection
+and folder reconnection. Restored access invalidates only failed cloud checks,
+requiring a fresh audit while preserving save conflicts and active transfers.
+Provider failures become an actionable storage message. Host library, Dock
+contract and cloud checks passed; on-device recovery remains to be retested.
+The 65-source mixed build compiled, linked and signed successfully at
+`/tmp/madeira-ssd-source-v6` (with provenance) and installed after the user
+confirmed the test app was closed. It was left closed for the requested
+unplug/open/reconnect/check-connection test.
+
 The first Brotato SSD install attempt in source-v2 stopped at the capacity gate:
 the user reported 0.2 GB required and 0.0 GB available. A read-only inspection of
 the disposable app's catalog confirmed the registered external destination;

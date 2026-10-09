@@ -172,7 +172,7 @@ require(-1 not in order and order == sorted(order),
         'Dock start: the app connection closes, then the sign-in is read and handed over, then the session starts')
 require(dock_start.count('SteamSignIn.credentialsForDock()') == 1 and dock_start.count('MadeiraDock.writeHandoff(') == 1,
         'the sign-in is read and written once, after the connection closed')
-require('SteamOwnedLibrary.shared.dockEnded()' in dock_start[:dock_start.index('Task { @MainActor in')],
+require('SteamOwnedLibrary.shared.dockEnded()' in block(dock_start, 'func fail('),
         'a failed Dock start gives the connection back')
 dock_view = (app / 'MadeiraDockView.swift').read_text()
 watch = block(dock_view, 'func watchReport()')

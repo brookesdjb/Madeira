@@ -1279,7 +1279,7 @@ struct ContentView: View {
                     sessionBody
                         .navigationBarHidden(true)
                 } else if library.enabled {
-                    LibraryView(play: launchLibraryEntry, enableJIT: enableJIT,
+                    LibraryView(play: { launchLibraryEntry($0) }, enableJIT: enableJIT,
                                 startDock: { startDock($0, compactPool: $1) })
                 } else {
                     developerBody
@@ -2502,7 +2502,18 @@ struct ContentView: View {
     /// Play in the library (Library.swift): checks that a session can start,
     /// applies the entry's launch profile and runs the same full sequence as the
     /// developer interface's buttons.
-    private func launchLibraryEntry(_ entry: LibraryEntry) {
+    private func launchLibraryEntry(_ entry: LibraryEntry, storageChecked: Bool = false) {
+        if entry.storageID != "internal", !storageChecked {
+            Task { @MainActor in
+                do {
+                    let access = try await SteamStorageModel.shared.accessForOperation(libraryID: entry.storageID, write: true)
+                    defer { access?.keepAlive() }
+                    SteamOwnedLibrary.shared.storageReconnected(entry.storageID)
+                    launchLibraryEntry(entry, storageChecked: true)
+                } catch { library.error = error.localizedDescription }
+            }
+            return
+        }
         // A Steam game starts through Madeira Dock with its own launch profile (SteamGames.swift),
         // unless its Game details page chose "The game": then its own program starts below, like
         // any library game (SteamDirectStart).
@@ -2511,7 +2522,7 @@ struct ContentView: View {
                 library.error = "Steam no longer lists this game as installed. Refresh the library and try again."; return
             }
             LogStore.shared.log("[steam-games] play app=\(appID)")
-            startDock(game, compactPool: MadeiraDockModel.shared.compactPool, profile: entry)
+            startDock(game, compactPool: MadeiraDockModel.shared.compactPool, profile: entry, storageChecked: storageChecked)
             return
         }
         if let appID = entry.steamAppID {
@@ -3271,7 +3282,18 @@ struct ContentView: View {
     /// show in the library, and the session gets the full-screen game view.
     /// `profile` is a Steam game's library entry (its Game details page): the
     /// session then takes that entry's display, performance and on-screen settings.
-    private func startDock(_ game: DockGame, compactPool: Bool, profile: LibraryEntry? = nil) {
+    private func startDock(_ game: DockGame, compactPool: Bool, profile: LibraryEntry? = nil, storageChecked: Bool = false) {
+        if game.storageID != "internal", !storageChecked {
+            Task { @MainActor in
+                do {
+                    let access = try await SteamStorageModel.shared.accessForOperation(libraryID: game.storageID, write: true)
+                    defer { access?.keepAlive() }
+                    SteamOwnedLibrary.shared.storageReconnected(game.storageID)
+                    startDock(game, compactPool: compactPool, profile: profile, storageChecked: true)
+                } catch { library.error = error.localizedDescription }
+            }
+            return
+        }
         let inLibrary = library.enabled
         guard jitReadyForLaunch(inLibrary: inLibrary, entry: profile?.id,
                                 then: { startDock(game, compactPool: compactPool, profile: profile) }) else { return }

@@ -350,9 +350,8 @@ final class SteamExternalLease: @unchecked Sendable {
             DispatchQueue.global(qos: .utility).async {
                 var delivered = false
                 func enter(write: Bool) throws {
-                    _ = try SteamExternalAccess.withLibrary(library, write: write) { root in
-                        var updated = library
-                        updated.bookmark = try root.bookmarkData(options: .minimalBookmark, includingResourceValuesForKeys: nil, relativeTo: nil)
+                    var updated = library
+                    _ = try SteamExternalAccess.withLibrary(library, write: write, registrationUpdated: { updated = $0 }) { root in
                         let finished = DispatchSemaphore(value: 0)
                         delivered = true
                         continuation.resume(returning: SteamExternalLease(root: root, library: updated, writable: write, finished: finished))
@@ -433,13 +432,14 @@ enum SteamExternalAccess {
                 id = current.id
             } else { id = try SteamStorageIdentity.register(root: root) }
             return SteamStorageLibrary(id: id, name: root.lastPathComponent,
-                                       bookmark: try root.bookmarkData(options: .minimalBookmark, includingResourceValuesForKeys: nil, relativeTo: nil))
+                                       bookmark: try url.bookmarkData(options: .minimalBookmark, includingResourceValuesForKeys: nil, relativeTo: nil))
         }
     }
 
     /// Return refreshed bookmark data alongside the result; the caller persists it
     /// only after identity validation. No fallback to an internal path on failure.
     static func withLibrary<T>(_ library: SteamStorageLibrary, write: Bool,
+                               registrationUpdated: ((SteamStorageLibrary) -> Void)? = nil,
                                _ body: (URL) throws -> T) throws -> (T, SteamStorageLibrary) {
         guard library.id != SteamStorageLibrary.internalID, let bookmark = library.bookmark else {
             throw SteamStorageError.invalidRecord
@@ -451,7 +451,8 @@ enum SteamExternalAccess {
             let values = try root.resourceValues(forKeys: [.volumeIsReadOnlyKey])
             if write && values.volumeIsReadOnly == true { throw SteamStorageError.unavailable(.readOnly) }
             var updated = library
-            if stale { updated.bookmark = try root.bookmarkData(options: .minimalBookmark, includingResourceValuesForKeys: nil, relativeTo: nil) }
+            if stale { updated.bookmark = try url.bookmarkData(options: .minimalBookmark, includingResourceValuesForKeys: nil, relativeTo: nil) }
+            registrationUpdated?(updated)
             return (try body(root), updated)
         }
     }

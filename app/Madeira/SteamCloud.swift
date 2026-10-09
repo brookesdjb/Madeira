@@ -667,6 +667,13 @@ struct SteamCloudState: Equatable, Sendable {
     /// Why the last download or upload stopped, shown on the game's page.
     var problem: String?
 
+    mutating func retryFailedCheck() {
+        guard case .failed = phase else { return }
+        phase = .ready
+        checked = nil // cloudHold treats this as stale and requires a fresh audit.
+        problem = nil
+    }
+
     static func == (a: SteamCloudState, b: SteamCloudState) -> Bool {
         a.phase == b.phase && a.audit == b.audit && a.checked == b.checked && a.conflicts == b.conflicts
             && a.lastUpload == b.lastUpload && a.problem == b.problem

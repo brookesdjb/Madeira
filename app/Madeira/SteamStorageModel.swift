@@ -43,8 +43,10 @@ import UniformTypeIdentifiers
             try SteamExternalAccess.register(url, replacing: previous)
         }.value
         try catalog.transaction(file: Self.file) { try $0.register(registration) }
+        liveAccess = nil
         availability = .available
         problem = nil
+        SteamOwnedLibrary.shared.storageReconnected(registration.id)
     }
 
     /// Always ask this before queueing or resuming. An existing assignment wins;
@@ -141,9 +143,11 @@ import UniformTypeIdentifiers
             problem = access.writable ? nil : SteamStorageError.unavailable(.readOnly).localizedDescription
             return value
         } catch {
+            liveAccess = nil
             availability = SteamExternalAccess.availability(for: error)
             problem = SteamStorageError.unavailable(availability).localizedDescription
-            throw error
+            if error is CancellationError { throw error }
+            throw SteamStorageError.unavailable(availability)
         }
     }
 
@@ -174,7 +178,18 @@ import UniformTypeIdentifiers
     func accessForOperation(libraryID: String, write: Bool) async throws -> SteamExternalLease? {
         _ = try library(libraryID)
         if libraryID == SteamStorageLibrary.internalID { return nil }
-        return try await acquire(libraryID: libraryID, write: write)
+        do {
+            let access = try await acquire(libraryID: libraryID, write: write)
+            availability = access.writable ? .available : .readOnly
+            problem = nil
+            return access
+        } catch {
+            liveAccess = nil
+            if error is CancellationError { throw error }
+            availability = SteamExternalAccess.availability(for: error)
+            problem = SteamStorageError.unavailable(availability).localizedDescription
+            throw SteamStorageError.unavailable(availability)
+        }
     }
 
     /// Acquired before any E: mapping or launch validation, held until all Wine
@@ -253,7 +268,11 @@ import UniformTypeIdentifiers
 
     func check() async {
         guard let external = catalog.external else { return }
-        do { _ = try await perform(libraryID: external.id, write: true) { _ in true } }
+        do {
+            _ = try await perform(libraryID: external.id, write: true) { _ in true }
+            SteamOwnedLibrary.shared.storageReconnected(external.id)
+            SteamGamesModel.shared.refresh()
+        }
         catch { }
     }
 }

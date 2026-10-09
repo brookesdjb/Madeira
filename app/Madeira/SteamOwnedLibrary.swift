@@ -513,6 +513,14 @@ final class SteamOwnedLibrary: ObservableObject {
 
     private var cloudBusy: Set<Int> = []
 
+    /// A failed storage lookup must be checked again after access is restored;
+    /// never turn it into a successful audit or clear a real save conflict.
+    func storageReconnected(_ libraryID: String) {
+        for assignment in SteamStorageModel.shared.catalog.assignments.values where assignment.location.libraryID == libraryID {
+            cloud[assignment.appID]?.retryFailedCheck()
+        }
+    }
+
     /// Compares the game's cloud saves with the prefix and returns what to do
     /// about the differences. Reads only (it records files found identical).
     @discardableResult

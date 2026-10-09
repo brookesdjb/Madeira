@@ -30,6 +30,7 @@ cloud = (app / 'SteamCloud.swift').read_text()
 owned = (app / 'SteamOwnedLibrary.swift').read_text()
 compare = cloud[cloud.index('// MARK: - Where a cloud path lives in the Wine prefix'):cloud.index('// MARK: - Download')]
 plan = cloud[cloud.index('// MARK: - What to do with a comparison'):cloud.index('// MARK: - Upload')]
+state = cloud[cloud.index('// MARK: - State the interface shows'):]
 
 # ------------------------------------------------------------------ static
 require('SteamSignIn.flag("MADEIRA_STEAM_CLOUD", default: true)' in owned,
@@ -59,6 +60,21 @@ struct SteamCloudListing { var changeNumber: UInt64 = 0; var files: [SteamCloudF
 
 var failed = 0
 func check(_ ok: Bool, _ label: String) { print((ok ? "PASS: " : "FAIL: ") + label); if !ok { failed += 1 } }
+
+var reconnected = SteamCloudState()
+reconnected.phase = .failed("storage unavailable")
+reconnected.checked = Date()
+reconnected.problem = "old provider error"
+reconnected.conflicts = [SteamCloudEntry(path: "save.dat", kind: .cloudOnly)]
+let savedConflicts = reconnected.conflicts
+reconnected.retryFailedCheck()
+check(reconnected.phase == .ready && reconnected.checked == nil && reconnected.problem == nil,
+      "reconnected storage requires a fresh cloud audit instead of retaining its failed check")
+check(reconnected.conflicts == savedConflicts, "reconnect preserves unresolved save decisions")
+reconnected.phase = .uploading(done: 1, of: 2)
+let uploading = reconnected
+reconnected.retryFailedCheck()
+check(reconnected == uploading, "reconnect does not disturb an active cloud transfer")
 
 func sha(_ byte: UInt8) -> Data { Data(repeating: byte, count: 20) }
 func hex(_ byte: UInt8) -> String { SteamCloudPlan.hex(sha(byte)) }
@@ -143,7 +159,7 @@ exit(failed == 0 ? 0 : 1)
 
 with tempfile.TemporaryDirectory() as tmp:
     src = Path(tmp) / 'main.swift'
-    src.write_text('import Foundation\nimport CryptoKit\n' + compare + '\n' + plan + '\n' + main.replace('import Foundation\n', '', 1))
+    src.write_text('import Foundation\nimport CryptoKit\n' + compare + '\n' + plan + '\n' + state + '\n' + main.replace('import Foundation\n', '', 1))
     out = Path(tmp) / 'cloud'
     build = subprocess.run([SWIFTC, '-O', str(src), '-o', str(out)], capture_output=True, text=True)
     if build.returncode != 0:

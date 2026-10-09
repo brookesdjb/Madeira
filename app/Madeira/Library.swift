@@ -2894,6 +2894,7 @@ struct LibraryDetail: View {
     var play: (LibraryEntry) -> Void
     @Environment(\.dismiss) private var dismiss
     @ObservedObject private var model = LibraryModel.shared
+    @ObservedObject private var storage = SteamStorageModel.shared
     @State private var importCover = false
     @State private var findCover = false
     @State private var remove = false
@@ -2968,7 +2969,13 @@ struct LibraryDetail: View {
                                     }
                                 }.frame(minWidth: 100, minHeight: 30)
                             }
-                            .buttonStyle(LibraryPlayStyle(pending: leaving)).disabled(leaving)
+                            .buttonStyle(LibraryPlayStyle(pending: leaving))
+                            .disabled(leaving || (entry.storageID != "internal" && storage.availability != .available))
+                            if entry.storageID != "internal", storage.availability != .available {
+                                Button("Check SSD connection") { Task { await storage.check() } }
+                                Text(storage.problem ?? "Reconnect the SSD before playing.").font(.footnote)
+                                NavigationLink("Reconnect SSD folder") { SteamStorageSettings() }
+                            }
                         }
                     }.padding(.vertical, 24)
                         .listRowBackground(
