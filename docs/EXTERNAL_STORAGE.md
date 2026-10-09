@@ -2,8 +2,8 @@
 
 Status on 2026-10-09: **data access and a controlled external EXE/DLL/asset/save fixture verified
 on an iPad; library integration is implemented and installed for device testing.**
-The first physical Steam download and gameplay checks for
-[issue 131](https://github.com/willfaust/Madeira/issues/131) are pending.
+The user confirmed Brotato's physical SSD download completed. Gameplay checks for
+[issue 131](https://github.com/willfaust/Madeira/issues/131) remain pending.
 Host success and installation are not claims of user-confirmed SSD gameplay.
 
 The first Brotato SSD install attempt in source-v2 stopped at the capacity gate:
@@ -22,7 +22,27 @@ Source-v3 compiled and linked all 65 Swift sources against the preserved runtime
 was signed, installed over the disposable test app, and launched successfully.
 Its build/provenance output is `/tmp/madeira-ssd-source-v3`; host library and games
 suites passed under AddressSanitizer, and the iOS source type-check passed.
-The user has been asked to retry the existing SSD download.
+The user confirmed the retry installed successfully. The catalog records app
+1942280 installed on its registered external identity, with 245,990,176 payload
+bytes. The subsequent launch showed the generic identity-mismatch alert.
+The old prototype registration and current library IDs match, but no launch
+mapping owner record exists. Source-v4 adds ownership handover from the isolated
+prototype's persisted registration for E: only, normalizes mapping comparisons
+to canonical paths, and distinguishes a mapping conflict from a folder identity
+failure. It still refuses to replace real directories or unowned unrelated links.
+Host checks cover stale owned mappings, matching unowned targets, unrelated
+unowned mappings, real directories and mismatched destination markers. The
+physical launch retry is required to establish whether this resolves the alert.
+Source-v4 compiled/linked 65 Swift sources, signed, installed over the disposable
+app and launched successfully. Output/provenance: `/tmp/madeira-ssd-source-v4`.
+The host library suite and iOS type-check passed; the user was asked to retry Play.
+
+After installation, the disposable app container contains 951 regular files
+totalling 1,302,539,848 bytes, versus 863 files and 1,288,441,301 bytes before the
+download: growth of 14,098,547 bytes. Internal `steamapps/common` payload bytes
+remain zero. Both measurements exclude symlinks and the E:/C: external aliases;
+the container therefore does not contain a second copy of the 245,990,176-byte
+game payload. These are device file-service observations, not gameplay evidence.
 
 ## Source and build baseline
 
@@ -156,7 +176,8 @@ folder selection. It imports no copy of the folder.
 | Full native source app | Still blocked by missing resources/native archives |
 | Source Swift interface + prebuilt native runtime | 65-source compile/link, signing, isolated installation and launch PASS; user confirmed the interface opens |
 | External Windows EXE/DLL + relative asset/save | PASS in the isolated prebuilt-runtime harness, confirmed by the user |
-| Dock and Brotato from SSD | NOT TESTED |
+| Brotato SSD install | PASS, user confirmed; 245,990,176 payload bytes recorded externally; no internal game payload copy |
+| Dock and Brotato launch from SSD | BLOCKED at launch mapping preflight; source-v4 retry pending |
 
 The Wine resolver input can be reproduced without initializing all of Wine:
 
@@ -211,7 +232,7 @@ This does not patch the native binary. Direct external 32-bit starts are refused
 in this build because its old PE probe cannot inspect E:. The native source fix
 is host-tested and syntax-checked, not linked into the published runtime.
 
-Still required: physical Steam download completion, normal Dock and direct
+Still required: normal Dock and direct
 Brotato gameplay, restart/reconnect launches, download unplug/resume,
 background/foreground/cancel, low-space/read-only, >4 GiB, APFS/exFAT where
 available, and before/after internal growth. File-presenter relinquishment under
@@ -270,7 +291,7 @@ are forwarded to verified existing implementations, with a hash-pinned input and
 per-source/output provenance. It compiled, signed, installed in the disposable
 probe container and launched a running `MadeiraSSDSource` process. This provides
 a device-test route for the upcoming Swift integration; native changes remain
-separate. The user confirmed the source interface opens. Steam download and gameplay checks remain pending. The owner confirmed
+separate. The user confirmed the source interface opens and subsequently completed the SSD download; gameplay remains pending. The owner confirmed
 Brotato is only in the working app; no game or credentials were copied from it.
 
 ### Downloader I/O follow-up

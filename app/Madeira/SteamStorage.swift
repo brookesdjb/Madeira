@@ -3,6 +3,9 @@
 // Madeira Converter Exception: see LICENSE-EXCEPTION.md
 
 import Foundation
+#if canImport(Glibc)
+import Glibc
+#endif
 
 /// Query the actual destination while its security scope is held. Some volumes
 /// report zero for important-usage capacity despite having ordinary free space.
@@ -168,7 +171,7 @@ enum SteamStorageAvailability: String, Codable {
 }
 
 enum SteamStorageError: Error, LocalizedError {
-    case unavailable(SteamStorageAvailability), unsafePath, unsupportedLocation, invalidRecord
+    case unavailable(SteamStorageAvailability), unsafePath, unsupportedLocation, invalidRecord, mappingConflict
     var errorDescription: String? {
         switch self {
         case .unavailable(.disconnected): return "Reconnect the registered SSD and try again."
@@ -179,7 +182,30 @@ enum SteamStorageError: Error, LocalizedError {
         case .unsafePath: return "The requested path leaves the registered library."
         case .unsupportedLocation: return "Select a dedicated folder on a locally attached drive. Cloud and network folders are unsupported."
         case .invalidRecord: return "The saved library registration is invalid."
+        case .mappingConflict: return "The Windows SSD drive mapping is already in use. The registered library folder is unchanged."
         }
+    }
+}
+
+/// Replace only an owned symlink; never replace a directory or payload. The
+/// caller establishes ownership from internal metadata before calling this.
+enum SteamStorageMapping {
+    static func replace(_ link: URL, root: URL, libraryID: String, ownerID: String?) throws {
+        try SteamStorageIdentity.verify(libraryID, root: root)
+        let fm = FileManager.default
+        do {
+            let attributes = try fm.attributesOfItem(atPath: link.path)
+            guard attributes[.type] as? FileAttributeType == .typeSymbolicLink else {
+                throw SteamStorageError.mappingConflict
+            }
+            let sameTarget = link.resolvingSymlinksInPath().standardizedFileURL.path == root.resolvingSymlinksInPath().standardizedFileURL.path
+            guard ownerID == libraryID || sameTarget else { throw SteamStorageError.mappingConflict }
+        } catch let error as NSError where error.domain == NSCocoaErrorDomain &&
+            [NSFileNoSuchFileError, NSFileReadNoSuchFileError].contains(error.code) { }
+        let temporary = link.deletingLastPathComponent().appendingPathComponent(".madeira-link-" + UUID().uuidString)
+        try fm.createSymbolicLink(at: temporary, withDestinationURL: root)
+        defer { try? fm.removeItem(at: temporary) }
+        guard rename(temporary.path, link.path) == 0 else { throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO) }
     }
 }
 

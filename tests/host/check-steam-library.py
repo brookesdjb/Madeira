@@ -696,6 +696,20 @@ func storageChecks() throws {
     let id = try SteamStorageIdentity.register(root: external)
     let library = SteamStorageLibrary(id: id, name: "SSD", bookmark: nil)
     try SteamStorageIdentity.verify(id, root: external)
+    let mapping = base.appendingPathComponent("e:")
+    try fm.createSymbolicLink(at: mapping, withDestinationURL: base.appendingPathComponent("old-mount"))
+    require((try? SteamStorageMapping.replace(mapping, root: external, libraryID: id, ownerID: nil)) == nil,
+            "storage: unowned stale mapping is not replaced")
+    try SteamStorageMapping.replace(mapping, root: external, libraryID: id, ownerID: id)
+    require(mapping.resolvingSymlinksInPath().path == external.path, "storage: owned stale mapping follows the reconnected library")
+    try SteamStorageMapping.replace(mapping, root: external, libraryID: id, ownerID: nil)
+    require(mapping.resolvingSymlinksInPath().path == external.path, "storage: matching target can be adopted without an owner record")
+    try fm.removeItem(at: mapping)
+    try fm.createDirectory(at: mapping, withIntermediateDirectories: false)
+    require((try? SteamStorageMapping.replace(mapping, root: external, libraryID: id, ownerID: id)) == nil,
+            "storage: mapping never replaces a real directory even with matching ownership")
+    require((try? SteamStorageMapping.replace(base.appendingPathComponent("wrong:"), root: external, libraryID: UUID().uuidString, ownerID: id)) == nil,
+            "storage: mapping rejects a mismatched destination marker")
     require((try? SteamStorageIdentity.register(root: external)) == id, "storage: repeat registration preserves identity")
     require((try? SteamStoragePath.windows("steamapps/common/Game", library: library)) == "E:\\steamapps\\common\\Game", "storage: external Windows mapping")
     require((try? SteamStoragePath.windows("Games/Test", library: .internalLibrary)) == "C:\\Games\\Test", "storage: internal Windows mapping")

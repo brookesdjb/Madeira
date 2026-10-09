@@ -209,25 +209,27 @@ import UniformTypeIdentifiers
             let recordedOwner = try? String(contentsOf: owner, encoding: .utf8)
             let devices = try SteamStoragePath.native("dosdevices", root: prefix)
             try fm.createDirectory(at: devices, withIntermediateDirectories: true)
-            func map(_ link: URL) throws {
-                do {
-                    let attributes = try fm.attributesOfItem(atPath: link.path)
-                    guard attributes[.type] as? FileAttributeType == .typeSymbolicLink,
-                          recordedOwner == libraryID || link.resolvingSymlinksInPath().standardizedFileURL == access.root.resolvingSymlinksInPath().standardizedFileURL else {
-                        throw SteamStorageError.unavailable(.identityMismatch)
-                    }
-                } catch let error as NSError where error.domain == NSCocoaErrorDomain && [NSFileNoSuchFileError, NSFileReadNoSuchFileError].contains(error.code) { }
-                let temporary = link.deletingLastPathComponent().appendingPathComponent(".madeira-link-" + UUID().uuidString)
-                try fm.createSymbolicLink(at: temporary, withDestinationURL: access.root)
-                defer { try? fm.removeItem(at: temporary) }
-                guard rename(temporary.path, link.path) == 0 else { throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO) }
+            let usesPrebuiltBridge = Bundle.main.object(forInfoDictionaryKey: "MadeiraUsesPrebuiltNativeBridge") as? Bool == true
+            var eOwner = recordedOwner
+            if usesPrebuiltBridge, recordedOwner == nil {
+                // Only the isolated runtime probe owned E: before the library
+                // frontend. Its persisted registration proves that ownership;
+                // a remount may have left its symlink at an obsolete mount path.
+                let legacy = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+                    .appendingPathComponent("external-library-prototype.json")
+                if let data = try? Data(contentsOf: legacy),
+                   let prototype = try? JSONDecoder().decode(SteamStorageLibrary.self, from: data),
+                   prototype.id == libraryID, prototype.bookmark != nil {
+                    eOwner = prototype.id
+                }
             }
-            try map(devices.appendingPathComponent("e:"))
-            if Bundle.main.object(forInfoDictionaryKey: "MadeiraUsesPrebuiltNativeBridge") as? Bool == true {
+            try SteamStorageMapping.replace(devices.appendingPathComponent("e:"), root: access.root, libraryID: libraryID, ownerID: eOwner)
+            if usesPrebuiltBridge {
                 // The pinned binary's working-directory bridge only accepts C:.
                 // Its direct-launch CWD alias is scoped and identity-checked just
                 // like E:. The game's canonical path and Dock mapping remain E:.
-                try map(MadeiraDock.drive.appendingPathComponent("MadeiraExternalLibrary"))
+                try SteamStorageMapping.replace(MadeiraDock.drive.appendingPathComponent("MadeiraExternalLibrary"), root: access.root,
+                                                libraryID: libraryID, ownerID: recordedOwner)
             }
             try Data(libraryID.utf8).write(to: owner, options: .atomic)
             let apps = Dictionary(uniqueKeysWithValues: catalog.assignments.values.filter {
