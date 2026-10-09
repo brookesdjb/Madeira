@@ -4,7 +4,7 @@
 # Madeira Converter Exception: see LICENSE-EXCEPTION.md
 """Host checks for the owned Steam library and downloads (docs/STEAM_LIBRARY.md).
 
-Never contacts Steam. It needs swiftc (Linux), cc, python3 with `cryptography`
+Never contacts Steam. It needs swiftc (Linux or macOS), cc, python3 with `cryptography`
 or the openssl command, and libssl/liblzma/zlib development files.
 
 Part A is static: licence headers, the Xcode project, no program names, the
@@ -1009,22 +1009,26 @@ downloader_host = downloader.replace('import Foundation\n', 'import Foundation\n
 space = ('let values = try? installURL.resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey])\n'
          '            let available = UInt64(max(0, values?.volumeAvailableCapacityForImportantUsage ?? Int64.max))')
 assert space in downloader_host
-downloader_host = downloader_host.replace(space, 'let available = UInt64.max')
+if sys.platform != "darwin":
+    downloader_host = downloader_host.replace(space, 'let available = UInt64.max')
 fetcher_source = sources['SwiftSteam/Library/SteamLibraryFetcher.swift']
 
 work = Path(tempfile.mkdtemp(prefix='madeira-steam-library-'))
 servers = []
 try:
     shim = work / 'shim'
-    for name, header, csource in [('CommonCrypto', CRYPTO_H, CRYPTO_C), ('Compression', COMPRESSION_H, COMPRESSION_C)]:
+    shim.mkdir()
+    # Apple supplies these modules and libraries. Linux uses equivalent shims.
+    apple = sys.platform == 'darwin'
+    for name, header, csource in ([] if apple else [('CommonCrypto', CRYPTO_H, CRYPTO_C), ('Compression', COMPRESSION_H, COMPRESSION_C)]):
         directory = shim / name
         directory.mkdir(parents=True)
         stem = 'cc_shim' if name == 'CommonCrypto' else 'compression_shim'
         (directory / f'{stem}.h').write_text(header)
         (directory / f'{stem}.c').write_text(csource)
         (directory / 'module.modulemap').write_text(f'module {name} [system] {{ header "{stem}.h" export * }}\n')
-    (shim / 'zlib').mkdir()
-    (shim / 'zlib/module.modulemap').write_text('module zlib [system] { header "/usr/include/zlib.h" link "z" export * }\n')
+    if not apple: (shim / 'zlib').mkdir()
+    if not apple: (shim / 'zlib/module.modulemap').write_text('module zlib [system] { header "/usr/include/zlib.h" link "z" export * }\n')
     (work / 'decoders.h').write_text(DECODERS_H.format(app=app))
 
     objects = []
@@ -1034,8 +1038,9 @@ try:
         require(result.returncode == 0, f'{Path(source).name} compiles on the host')
         if result.returncode: sys.stdout.write(result.stderr[-3000:])
         objects.append(str(obj))
-    compile_c(shim / 'CommonCrypto/cc_shim.c', ['-I', str(shim / 'CommonCrypto')])
-    compile_c(shim / 'Compression/compression_shim.c', ['-I', str(shim / 'Compression')])
+    if not apple:
+        compile_c(shim / 'CommonCrypto/cc_shim.c', ['-I', str(shim / 'CommonCrypto')])
+        compile_c(shim / 'Compression/compression_shim.c', ['-I', str(shim / 'Compression')])
     for name in ['zstd_edu.c', 'lzma_shim.c', 'chunk_zip.c']:
         compile_c(steam / name)
 
@@ -1059,7 +1064,7 @@ try:
                             '-import-objc-header', str(work / 'decoders.h'),
                             str(work / 'stubs.swift'), str(work / 'checks.swift'), str(work / 'dock.swift'), str(work / 'owned.swift'),
                             str(work / 'downloader.swift')] + [str(x) for x in production] + objects +
-                           ['-Xlinker', '-lcrypto', '-Xlinker', '-llzma', '-Xlinker', '-lz'], capture_output=True, text=True)
+                           ([] if apple else ['-Xlinker', '-lcrypto']) + ['-Xlinker', '-llzma', '-Xlinker', '-lz'], capture_output=True, text=True)
     require(build.returncode == 0, 'the production Steam library, download and decoder code compile on the host')
     if build.returncode:
         sys.stdout.write(build.stderr[-6000:])
