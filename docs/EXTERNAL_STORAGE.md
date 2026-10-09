@@ -203,3 +203,30 @@ from E:. The corrected signed app is installed and launched. The user confirmed 
 PASS result: the external EXE and DLL loaded, the relative asset matched, and
 the beside-executable save was written, renamed, reopened and verified. This is a prebuilt-runtime
 experiment, not a successful full source app build or completed SSD support.
+
+## Persistent catalog and async access increment
+
+`SteamStorageLocation` stores a library ID and a validated relative path. Missing
+IDs decode as internal; resolving an address against another library is refused.
+`SteamStorageCatalog` keeps the registered external bookmark and per-App-ID
+assignments internally, including partial installs. An existing assignment cannot
+change destination. Transactions validate and atomically write the new catalog
+before publishing it in memory; corrupt catalogs fail closed rather than resetting
+to an empty internal library. These primitives are not yet wired to the install UI.
+
+`SteamExternalAccess.perform` spans an entire async operation with a coordinated
+accessor. Its cancellation bridge cancels the operation and waits for its cleanup
+before returning and releasing the scope. The production-code host integration
+suite passed migration, destination persistence, retarget refusal, failed-write
+rollback, corrupt-record refusal, moved-root resolution, cancellation before
+starting, and cancellation cleanup checks. All 64 app Swift sources type-check
+for iOS with these additions. Live async downloader integration is still pending.
+
+The runtime harness now also has a `FRONTEND=source` mode: the complete checkout
+Swift interface links to the preserved native binary. Three hidden native symbols
+are forwarded to verified existing implementations, with a hash-pinned input and
+per-source/output provenance. It compiled, signed, installed in the disposable
+probe container and launched a running `MadeiraSSDSource` process. This provides
+a device-test route for the upcoming Swift integration; native changes remain
+separate. Visual acceptance and Steam sign-in are pending. The owner confirmed
+Brotato is only in the working app; no game or credentials were copied from it.

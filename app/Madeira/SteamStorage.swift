@@ -5,7 +5,6 @@
 import Foundation
 
 /// Persistent identity is independent of the removable volume's current mount path.
-/// The first prototype deliberately does not enable external installs or discovery.
 struct SteamStorageLibrary: Codable, Equatable, Identifiable, Sendable {
     static let internalID = "internal"
     let id: String
@@ -13,6 +12,123 @@ struct SteamStorageLibrary: Codable, Equatable, Identifiable, Sendable {
     var bookmark: Data?
     var windowsDrive: String { id == Self.internalID ? "C" : "E" }
     static let internalLibrary = Self(id: internalID, name: "iPad", bookmark: nil)
+}
+
+/// A saved location never contains a removable volume's native mount path.
+/// Missing library IDs in older records mean the existing internal library.
+struct SteamStorageLocation: Codable, Equatable, Sendable {
+    let libraryID: String
+    let relativePath: String
+
+    init(libraryID: String = SteamStorageLibrary.internalID, relativePath: String) throws {
+        guard libraryID == SteamStorageLibrary.internalID || UUID(uuidString: libraryID) != nil else {
+            throw SteamStorageError.invalidRecord
+        }
+        _ = try SteamStoragePath.components(relativePath)
+        self.libraryID = libraryID
+        self.relativePath = relativePath
+    }
+
+    private enum CodingKeys: String, CodingKey { case libraryID, relativePath }
+    init(from decoder: Decoder) throws {
+        let fields = try decoder.container(keyedBy: CodingKeys.self)
+        try self.init(libraryID: fields.decodeIfPresent(String.self, forKey: .libraryID) ?? SteamStorageLibrary.internalID,
+                      relativePath: fields.decode(String.self, forKey: .relativePath))
+    }
+
+    func windowsPath(in library: SteamStorageLibrary) throws -> String {
+        guard library.id == libraryID else { throw SteamStorageError.unavailable(.identityMismatch) }
+        return try SteamStoragePath.windows(relativePath, library: library)
+    }
+
+    /// `root` must come from the matching library's live access operation.
+    func nativeURL(in library: SteamStorageLibrary, root: URL) throws -> URL {
+        guard library.id == libraryID else { throw SteamStorageError.unavailable(.identityMismatch) }
+        if libraryID != SteamStorageLibrary.internalID { try SteamStorageIdentity.verify(libraryID, root: root) }
+        return try SteamStoragePath.native(relativePath, root: root)
+    }
+}
+
+/// Persisted before queueing the first byte. A partial install keeps its original
+/// library after restart; updates and repairs cannot silently change it either.
+struct SteamStorageAssignment: Codable, Equatable, Sendable {
+    let appID: Int
+    let location: SteamStorageLocation
+    var name: String
+    var installed: Bool
+    var buildID: Int?
+    var bytes: Int64?
+}
+
+/// Metadata stays internal so unavailable games and partial downloads remain
+/// visible. Payloads, manifests, journals and depot caches stay at `location`.
+/// All mutation is transactional: a failed save leaves the prior catalog intact.
+struct SteamStorageCatalog: Codable, Equatable {
+    private(set) var version = 1
+    private(set) var external: SteamStorageLibrary?
+    private(set) var assignments: [Int: SteamStorageAssignment] = [:]
+
+    init() {}
+
+    func library(_ id: String) throws -> SteamStorageLibrary {
+        if id == SteamStorageLibrary.internalID { return .internalLibrary }
+        guard let external, external.id == id else { throw SteamStorageError.invalidRecord }
+        return external
+    }
+
+    mutating func register(_ library: SteamStorageLibrary) throws {
+        guard UUID(uuidString: library.id) != nil, let bookmark = library.bookmark, !bookmark.isEmpty,
+              external == nil || external?.id == library.id else { throw SteamStorageError.invalidRecord }
+        external = library
+    }
+
+    mutating func assign(_ assignment: SteamStorageAssignment) throws {
+        guard assignment.appID > 0, assignment.appID < Int(UInt32.max) else { throw SteamStorageError.invalidRecord }
+        _ = try library(assignment.location.libraryID)
+        if let existing = assignments[assignment.appID], existing.location != assignment.location {
+            throw SteamStorageError.invalidRecord
+        }
+        assignments[assignment.appID] = assignment
+    }
+
+    /// Only call after successful payload/record deletion under live access.
+    mutating func remove(appID: Int) { assignments.removeValue(forKey: appID) }
+
+    func validate() throws {
+        guard version == 1, assignments.count <= 100_000 else { throw SteamStorageError.invalidRecord }
+        if let external {
+            guard UUID(uuidString: external.id) != nil, let bookmark = external.bookmark,
+                  !bookmark.isEmpty, bookmark.count <= 1 << 20 else { throw SteamStorageError.invalidRecord }
+        }
+        for (key, value) in assignments {
+            guard key == value.appID, key > 0, key < Int(UInt32.max),
+                  value.name.utf8.count <= 4096, (value.bytes ?? 0) >= 0 else { throw SteamStorageError.invalidRecord }
+            _ = try library(value.location.libraryID)
+            _ = try SteamStoragePath.components(value.location.relativePath)
+        }
+    }
+
+    static func load(from file: URL) throws -> Self {
+        let data: Data
+        do { data = try Data(contentsOf: file) }
+        catch let error as NSError where error.domain == NSCocoaErrorDomain && error.code == NSFileReadNoSuchFileError {
+            return Self()
+        }
+        guard data.count <= 16 << 20 else { throw SteamStorageError.invalidRecord }
+        let catalog = try JSONDecoder().decode(Self.self, from: data)
+        try catalog.validate()
+        return catalog
+    }
+
+    mutating func transaction(file: URL, _ edit: (inout Self) throws -> Void) throws {
+        var next = self
+        try edit(&next)
+        try next.validate()
+        let data = try JSONEncoder().encode(next)
+        try FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try data.write(to: file, options: .atomic)
+        self = next
+    }
 }
 
 enum SteamStorageAvailability: String, Codable {
@@ -110,6 +226,50 @@ enum SteamStorageIdentity {
     }
 }
 
+/// Bridges a coordinated synchronous accessor to an async downloader/save task.
+/// Cancellation reaches the task, but the accessor cannot return (and release
+/// access) until that task has actually finished closing its files.
+final class SteamStorageAsyncWork<Value: Sendable>: @unchecked Sendable {
+    private let lock = NSLock()
+    private let finished = DispatchSemaphore(value: 0)
+    private var task: Task<Void, Never>?
+    private var cancelled = false
+    private var started = false
+    private var outcome: Result<Value, Error>?
+
+    func cancel() {
+        lock.lock()
+        cancelled = true
+        task?.cancel()
+        lock.unlock()
+    }
+
+    /// Invoke exactly once, from a worker, inside the coordinated accessor.
+    func execute(_ operation: @escaping @Sendable () async throws -> Value) throws -> Value {
+        lock.lock()
+        precondition(!started, "An access operation can only execute once")
+        started = true
+        if cancelled { lock.unlock(); throw CancellationError() }
+        let work = Task.detached { [self] in
+            let result: Result<Value, Error>
+            do {
+                try Task.checkCancellation()
+                result = .success(try await operation())
+            } catch { result = .failure(error) }
+            lock.withLock { outcome = result }
+            finished.signal()
+        }
+        task = work
+        if cancelled { work.cancel() }
+        lock.unlock()
+        finished.wait()
+        return try lock.withLock {
+            task = nil
+            return try outcome!.get()
+        }
+    }
+}
+
 #if os(iOS) || os(macOS)
 /// One balanced scope and a coordinated accessor cover the *whole* synchronous
 /// operation, including all POSIX handles and mappings. Run on a worker queue.
@@ -117,6 +277,25 @@ enum SteamStorageIdentity {
 /// A Wine session will require an accessor that ends only when Wine has stopped;
 /// this data probe does not claim to have established that runtime contract.
 enum SteamExternalAccess {
+    /// Coordinates the entire async operation, including cancellation cleanup.
+    /// The refreshed registration is returned only after the accessor has ended.
+    /// Never let the closure return a live handle or a task using the root.
+    static func perform<Value: Sendable>(_ library: SteamStorageLibrary, write: Bool,
+                                         _ operation: @escaping @Sendable (URL) async throws -> Value) async throws -> (Value, SteamStorageLibrary) {
+        let work = SteamStorageAsyncWork<Value>()
+        return try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { continuation in
+                DispatchQueue.global(qos: .utility).async {
+                    continuation.resume(with: Result {
+                        try withLibrary(library, write: write) { root in
+                            try work.execute { try await operation(root) }
+                        }
+                    })
+                }
+            }
+        } onCancel: { work.cancel() }
+    }
+
     static func coordinate<T>(url: URL, write: Bool, _ body: (URL) throws -> T) throws -> T {
         guard url.startAccessingSecurityScopedResource() else {
             throw SteamStorageError.unavailable(.permissionDenied)

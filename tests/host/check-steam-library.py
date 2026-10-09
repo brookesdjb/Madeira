@@ -690,6 +690,38 @@ func storageChecks() throws {
     require((try? SteamStorageIdentity.register(root: external)) == id, "storage: repeat registration preserves identity")
     require((try? SteamStoragePath.windows("steamapps/common/Game", library: library)) == "E:\\steamapps\\common\\Game", "storage: external Windows mapping")
     require((try? SteamStoragePath.windows("Games/Test", library: .internalLibrary)) == "C:\\Games\\Test", "storage: internal Windows mapping")
+    let legacy = try JSONDecoder().decode(SteamStorageLocation.self, from: Data(#"{"relativePath":"Games/Old/game.exe"}"#.utf8))
+    require(legacy.libraryID == SteamStorageLibrary.internalID, "storage: legacy location migrates to internal without moving files")
+    let location = try SteamStorageLocation(libraryID: id, relativePath: "steamapps/common/Game")
+    require((try? location.windowsPath(in: library)) == "E:\\steamapps\\common\\Game", "storage: persistent location resolves registered drive")
+    require((try? location.nativeURL(in: .internalLibrary, root: external)) == nil, "storage: external address cannot use internal root")
+    let catalogURL = base.appendingPathComponent("catalog.json")
+    var catalog = try SteamStorageCatalog.load(from: catalogURL)
+    var registered = library
+    registered.bookmark = Data("synthetic bookmark".utf8)
+    let assignment = SteamStorageAssignment(appID: 55, location: location, name: "Game", installed: false)
+    try catalog.transaction(file: catalogURL) { next in
+        try next.register(registered)
+        try next.assign(assignment)
+    }
+    require((try? SteamStorageCatalog.load(from: catalogURL)) == catalog, "storage: queued destination survives restart")
+    let initialCatalog = catalog
+    let internalLocation = try SteamStorageLocation(relativePath: "Program Files (x86)/Steam/steamapps/common/Game")
+    do {
+        try catalog.transaction(file: catalogURL) { next in
+            try next.assign(SteamStorageAssignment(appID: 55, location: internalLocation, name: "Game", installed: false))
+        }
+        require(false, "storage: partial install cannot retarget internal")
+    } catch { require(catalog == initialCatalog, "storage: partial install cannot retarget internal") }
+    let badSave = base.appendingPathComponent("not-a-directory")
+    try Data().write(to: badSave)
+    do {
+        try catalog.transaction(file: badSave.appendingPathComponent("catalog.json")) { $0.remove(appID: 55) }
+        require(false, "storage: failed persistence rolls back in-memory mutation")
+    } catch { require(catalog == initialCatalog, "storage: failed persistence rolls back in-memory mutation") }
+    try Data("broken".utf8).write(to: catalogURL)
+    require((try? SteamStorageCatalog.load(from: catalogURL)) == nil, "storage: corrupt catalog never resets into an internal fallback")
+    try JSONEncoder().encode(catalog).write(to: catalogURL)
     for bad in ["/abs", "../escape", "a/../escape", "C:\\escape", "a//b", "a/", "a\u{0}b"] {
         require((try? SteamStoragePath.native(bad, root: external)) == nil, "storage: rejects invalid relative path")
     }
@@ -700,6 +732,10 @@ func storageChecks() throws {
     let relocated = base.appendingPathComponent("SSD-reconnected")
     try fm.moveItem(at: external, to: relocated)
     try SteamStorageIdentity.verify(id, root: relocated)
+    require((try? location.nativeURL(in: library, root: relocated)) == relocated.appendingPathComponent("steamapps/common/Game"),
+            "storage: persisted game address follows relocated registered library")
+    require((try? SteamStorageCatalog.load(from: catalogURL))?.assignments[55] == assignment,
+            "storage: disconnected library retains its install assignment")
     require(true, "storage: identity survives changed mount path")
     try fm.createDirectory(at: external, withIntermediateDirectories: false)
     _ = try SteamStorageIdentity.register(root: external)
@@ -725,8 +761,44 @@ func storageChecks() throws {
     #endif
 }
 
+func storageAsyncChecks() async throws {
+    let normal = SteamStorageAsyncWork<Int>()
+    let value = try await Task.detached { try normal.execute { 73 } }.value
+    require(value == 73, "storage: async operation finishes before accessor returns")
+    let cancelled = SteamStorageAsyncWork<Int>()
+    cancelled.cancel()
+    do {
+        _ = try await Task.detached { try cancelled.execute { fatalError("cancelled operation ran") } }.value
+        require(false, "storage: cancellation before access prevents operation")
+    } catch { require(error is CancellationError, "storage: cancellation before access prevents operation") }
+    let cleanup = FileManager.default.temporaryDirectory.appendingPathComponent("storage-cleanup-" + UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: cleanup) }
+    let work = SteamStorageAsyncWork<Int>()
+    let signal = AsyncStream<Void>.makeStream()
+    let worker = Task.detached {
+        try work.execute {
+            signal.continuation.yield(())
+            signal.continuation.finish()
+            do { try await Task.sleep(nanoseconds: 60_000_000_000) }
+            catch {
+                try Data("closed".utf8).write(to: cleanup)
+                throw error
+            }
+            return 0
+        }
+    }
+    for await _ in signal.stream { break }
+    work.cancel()
+    do { _ = try await worker.value; require(false, "storage: cancellation propagates into active async operation") }
+    catch {
+        require(error is CancellationError && FileManager.default.fileExists(atPath: cleanup.path),
+                "storage: cancellation waits for operation cleanup before releasing accessor")
+    }
+}
+
 @MainActor func units(_ fx: [String: Any]) async throws {
     try storageChecks()
+    try await storageAsyncChecks()
     // ---- protobuf: hostile input throws instead of trapping
     var big = ProtobufDecoder(Data([0x0a, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x01]))
     _ = try? big.readTag()
