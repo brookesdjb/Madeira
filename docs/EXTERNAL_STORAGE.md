@@ -105,6 +105,23 @@ runtime, and the source-v9 app was signed successfully. Ready build and provenan
 `/tmp/madeira-ssd-source-v9`. It has not been installed; source-v8 remains on the
 iPad until the owner returns for the next test.
 
+The owner subsequently reported that the installed build stopped gracefully at
+248 MB during the Borderlands GOTY download, requested SSD reconnection and
+resumed from the stopped position after reconnect/Try again. Completion was not
+confirmed at that point. Later the prerequisite phase stalled at PhysX. The live
+installer report shows MSVC returning 0 followed by PhysX starting without an
+exit record. The storage catalog identifies the registered external library and
+13,148,046,648 bytes, with installed=true but pending=true; this does not establish
+that all download/update work is complete or that the game is playable.
+
+The owner identified a prior-chat workaround, `MADEIRA_WOW_SMALL_VA_SLOTS=4`.
+The disposable app had no override (source default 2). At the owner's request,
+only its `env.MADEIRA_WOW_SMALL_VA_SLOTS` config key was set to 4 and read back to
+verify, preserving other settings and leaving the original app untouched. A full
+test-app restart and explicit one-time-installer retry are required. No PhysX
+success is claimed from changing this setting; the source-v9 build is still not
+installed.
+
 The first Brotato SSD install attempt in source-v2 stopped at the capacity gate:
 the user reported 0.2 GB required and 0.0 GB available. A read-only inspection of
 the disposable app's catalog confirmed the registered external destination;
