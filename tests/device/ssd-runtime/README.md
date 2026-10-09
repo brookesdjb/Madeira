@@ -138,6 +138,16 @@ confirmed the interface opens. Steam download and gameplay checks are pending. T
 working `com.brookes.madeira` installation was not replaced or read. Brotato
 exists only in that working app; use a fresh install for the future SSD test.
 
+When upgrading this disposable app from the fixture to the source frontend, run
+`python3 tests/device/ssd-runtime/clear-probe-overrides.py --device <UDID>` and
+restart the app before Play. The fixture wrote `env.MADEIRA_EXE` and an empty
+`env.MADEIRA_ARGS` into Documents/madeira.cfg. The native runtime reapplies those
+settings after the library sets its launch target, so leaving them in place
+starts the fixture instead of Dock or the game. The cleanup accepts only the
+exact generated fixture target and empty arguments, preserves other lines,
+verifies the written file, and is restricted to the disposable bundle ID.
+`--self-test` checks preservation and refusal of custom or ambiguous overrides.
+
 The integrated diagnostic build sets `MadeiraUsesPrebuiltNativeBridge` in its
 Info.plist. That makes direct launches pass a registered C: alias as their
 working directory and SteamAppPath, compensating for the pinned binary's old

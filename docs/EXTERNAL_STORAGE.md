@@ -36,6 +36,14 @@ physical launch retry is required to establish whether this resolves the alert.
 Source-v4 compiled/linked 65 Swift sources, signed, installed over the disposable
 app and launched successfully. Output/provenance: `/tmp/madeira-ssd-source-v4`.
 The host library suite and iOS type-check passed; the user was asked to retry Play.
+The retry passed storage setup but exited without a final Dock result. Inspection
+found that the prototype's `env.MADEIRA_EXE` still forced `ssd_probe.exe`; its
+empty `env.MADEIRA_ARGS` override also remained in Documents/madeira.cfg. The
+runtime log showed the fixture executing and exiting with code 4, so this was
+not evidence that Brotato or Valve's client had started. The narrowly matched
+`clear-probe-overrides.py` cleanup removed only those two fixture settings in the
+disposable app, verified the written file and restarted the app. Its self-test
+passed. Another user Play check is pending; no game data or sign-in was changed.
 
 After installation, the disposable app container contains 951 regular files
 totalling 1,302,539,848 bytes, versus 863 files and 1,288,441,301 bytes before the
@@ -177,7 +185,7 @@ folder selection. It imports no copy of the folder.
 | Source Swift interface + prebuilt native runtime | 65-source compile/link, signing, isolated installation and launch PASS; user confirmed the interface opens |
 | External Windows EXE/DLL + relative asset/save | PASS in the isolated prebuilt-runtime harness, confirmed by the user |
 | Brotato SSD install | PASS, user confirmed; 245,990,176 payload bytes recorded externally; no internal game payload copy |
-| Dock and Brotato launch from SSD | BLOCKED at launch mapping preflight; source-v4 retry pending |
+| Dock and Brotato launch from SSD | Storage preflight passed; stale fixture launch override removed; actual game retry pending |
 
 The Wine resolver input can be reproduced without initializing all of Wine:
 
