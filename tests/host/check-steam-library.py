@@ -31,6 +31,8 @@ scripted Steam connection (`SteamCMSession`), and runs it:
   installed until its record is written, and once written is found by Madeira
   Dock's own scanner (MadeiraDock.games); an update fetches only what changed and
   shrinks files; hostile manifest paths never leave the install folder.
+  MADEIRA_TEST_EXTERNAL_PARENT optionally places the external fixture in a fresh
+  child of a mounted test volume; the parent itself is never removed.
 """
 from pathlib import Path
 import base64
@@ -1382,6 +1384,7 @@ fetcher_source = sources['SwiftSteam/Library/SteamLibraryFetcher.swift']
 
 work = Path(tempfile.mkdtemp(prefix='madeira-steam-library-'))
 servers = []
+external_work = None
 try:
     shim = work / 'shim'
     shim.mkdir()
@@ -1592,14 +1595,34 @@ try:
             not list((work / 'symlink-root/outside').iterdir()),
             'a preexisting common symlink cannot redirect a download outside the library')
     # The same production downloader/scanner/deletion code at an external root.
-    external_fixture = dict(fixture, storage='external', tmp=str(work / 'external-root'))
-    state.reset_counters()
+    external_root = work / 'external-root'
+    # Optional existing mount supplied by the disposable-volume harness. Always
+    # create our own fresh child; never reuse or delete the supplied parent.
+    if parent := os.environ.get('MADEIRA_TEST_EXTERNAL_PARENT'):
+        external_work = Path(tempfile.mkdtemp(prefix='madeira-download-fixture-', dir=parent))
+        external_root = external_work
+    external_fixture = dict(fixture, storage='external', tmp=str(external_root))
+    external_apps = external_root / 'external/steamapps'
+    state.reset_counters(); state.limit = 4
+    interrupted = run('interrupt', external_fixture)
+    require(interrupted.get('install') == 'failed' and not (external_apps / 'appmanifest_9000.acf').exists(),
+            'external interrupted install retains no completed install record')
+    external_done = set()
+    # exFAT can carry AppleDouble ._ sidecars; only depot journals are chunk records.
+    for journal in (external_apps / 'downloading/9000').glob('depot_*.journal'):
+        depot_id = int(re.match(r'depot_(\d+)_', journal.name).group(1))
+        depot = {9001: version1, 9003: shared}[depot_id]
+        for line in journal.read_text().split():
+            key = int(line, 16)
+            external_done.add(depot.files[key >> 32]['chunks'][key & 0xffffffff][0].hex())
+    require(external_done, 'external interruption retains usable chunk journals')
+    state.reset_counters(); state.limit = None
     result = run('resume', external_fixture)
-    external_apps = work / 'external-root/external/steamapps'
+    require(not (set(state.chunk_requests) & external_done), 'external resume reuses verified completed chunks')
     require(result.get('install') == 'ok' and result.get('listed') == '1' and
             (external_apps / 'appmanifest_9000.acf').is_file() and
             (external_apps / f'depotcache/9001_{gid1}.manifest').is_file() and
-            not (work / 'external-root/drive_c').exists(),
+            not (external_root / 'drive_c').exists(),
             'external payloads, records and depot cache stay external with no internal game staging')
     state.reset_counters()
     result = run('update', external_fixture)
@@ -1609,6 +1632,8 @@ try:
     require(not list(external_apps.glob('appmanifest_*.acf')) and not (external_apps / 'common/Fixture Game').exists(),
             'external uninstall removes payload and records from the selected library')
 finally:
+    if external_work is not None:
+        shutil.rmtree(external_work)
     for server in servers:
         server.shutdown(); server.server_close()
     if os.environ.get('MADEIRA_KEEP_WORK'):

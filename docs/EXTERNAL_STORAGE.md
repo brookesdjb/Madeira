@@ -1,5 +1,44 @@
 # External SSD implementation record
 
+## Current handover (2026-10-09)
+
+- **Installed:** source-v11 in the isolated Madeira SSD Library app. Its live
+  removal check while a card stays open still needs the owner test.
+- **Prepared, not installed:** source-v13 at
+  `/tmp/madeira-ssd-source-v13/MadeiraSSDRuntime.app`, with source/native
+  provenance. All 65 compiled Swift source hashes match the current checkout.
+- **New host-verified fixes:** cancellable resume verification, sparse-file
+  capacity estimates and large-offset bounds, external GameInstall cloud-save
+  path containment, and permission/read-only error classification.
+- **User-confirmed gameplay:** Brotato and Borderlands GOTY from the SSD;
+  Borderlands recovered from an interrupted download. The test app retains the
+  owner's `MADEIRA_WOW_SMALL_VA_SLOTS=4` setting. The original app was not changed.
+- **Still unverified:** current card refresh and resumed-count presentation,
+  physical background/foreground interruption, direct game launch, live cloud
+  upload/conflict continuity, physical read-only/low-space/large-file and format
+  combinations. Desktop visibility during startup remains unexplained. The
+  DirectX prerequisite returned a failure despite Borderlands gameplay working.
+- **Build limitation:** this is the current Swift frontend linked to a preserved,
+  hash-pinned native runtime. Full native source linking and Valve registration
+  through canonical E: remain unverified; tested Steam launches use the scoped
+  C: alias. No new JIT/graphics/runtime-binary changes were made in this follow-up.
+
+Next owner checks, in order:
+
+1. On installed source-v11, keep a paused game's card open, unplug the SSD and
+   allow a few seconds for Resume to disable. Reconnect, Check SSD connection,
+   then resume in the same card.
+2. Confirm downloaded/total counts survive pause, app close and reopen. A
+   read-only catalog inspection already confirms a persisted SSD progress
+   snapshot of 2,958,112,528 / 29,870,931,248 bytes for the pending transfer; this
+   is persisted-state evidence, not UI acceptance.
+3. When ready for source-v13 installation, pause the transfer and close the app.
+   Then check pause/resume during local-file verification and a normal SSD game
+   launch with the existing saves. Remaining failure-matrix tests follow later.
+
+The sections below are the chronological implementation and evidence ledger;
+older "pending" statements describe the stage at which they were recorded.
+
 Status on 2026-10-09: **Brotato and Borderlands GOTY downloaded to the SSD and
 are user-confirmed playable through Madeira Dock using the scoped C: alias in
 the mixed-source build.** Borderlands also passed the reported unplug/reconnect
@@ -11,7 +50,7 @@ fullscreen after tapping the game, and gameplay appeared normal. This records th
 observed focus behaviour without changing graphics or JIT settings. The live
 numeric Dock report independently confirmed `session-requested-app-listed=1`,
 `launch-install-directory-verified=1`, `launch-client-error=0` and
-`launch-game-running=1`. Reconnect/relaunch also passed on source-v6. Save continuity and the remaining
+`launch-game-running=1`. Reconnect/relaunch also passed on source-v6. Byte-level save/cloud-upload verification and the remaining
 physical matrix for [issue 131](https://github.com/willfaust/Madeira/issues/131)
 are still outstanding. The working original app remains separate.
 
@@ -605,3 +644,72 @@ from the current app run contain no historical launch-view transitions. There
 is insufficient evidence to change reveal/focus policy, so no graphics, JIT or
 starting-screen settings were changed. The user-observed startup desktop remains
 an open physical observation.
+
+## Borderlands internal-storage follow-up
+
+A read-only inventory after Borderlands gameplay and the subsequent paused-download
+checks counted 1,649 regular internal files totaling 1,590,187,281 bytes, excluding
+symlinks, dosdevices and the external C: alias. The pre-Borderlands baseline was
+1,368,320,927 bytes: growth of 221,866,354 bytes (about 222 MB). Internal
+`steamapps/common` payload bytes remained zero, versus Borderlands' cataloged
+13,148,046,648 SSD payload bytes. This includes prerequisites and later testing,
+so the growth is not attributed exclusively to Borderlands. Sanitized aggregate
+records are `/tmp/madeira-borderlands-ssd-baseline.json` and
+`/tmp/madeira-borderlands-ssd-after.json`; raw device inventories are not committed.
+
+## Foreground monitor access lifetime follow-up
+
+Review found that source-v11's idle card monitor retained a coordinated write
+accessor across every timer sleep. It now scopes access to each validation and
+releases its reference before sleeping, so an idle card does not keep a writer
+open while the folder picker reauthorizes the same library. Active downloads and
+game sessions retain their own operation/session leases. This is a code-review
+improvement; its device responsiveness and picker interaction remain unverified.
+
+## Disposable APFS/exFAT volume checks
+
+`python3 tests/host/check-steam-storage-volumes.py --with-downloads` creates
+bounded 128 MiB disk images, mounts them without opening Finder, and detaches
+and deletes only its own scratch images. `--filesystem APFS` or
+`--filesystem ExFAT` limits the run. APFS and exFAT both passed:
+
+- Actual write/rename/reopen and stable identity checks.
+- Actual ENOSPC on bounded payload writes, preserved earlier payload/marker,
+  and capacity recovery after removing the test fill file.
+- Remount read-only, correctly classified failed write, and no created file.
+- Production external downloader interruption with no completed record, preserved
+  chunk journals, verified resume without refetching completed chunks, discovery,
+  update reusing unchanged chunks and uninstall. These use the existing local
+  content-server fixture and AddressSanitizer, not a second downloader.
+
+The APFS full-volume query still reported 3,784,704 bytes and exFAT 798,720 bytes
+after a 1 MiB write failed. Capacity is an estimate; write errors remain essential.
+The initial image harness needed a normalized `/var` versus `/private/var` mount
+path, an MBR layout and short volume label for the small exFAT image, and strict
+`depot_*.journal` selection to avoid macOS AppleDouble sidecars. Those were harness
+setup issues, not product failures; both final filesystem runs passed. These
+macOS image results do not replace the physical iPad format/USB/access tests.
+
+## Consolidated host validation during autonomous follow-up
+
+Passed: production library/download suite (AddressSanitizer), games suite
+(AddressSanitizer), cloud comparison/planning, frontend launch profiles and exit
+hook, Dock contract (AddressSanitizer), launch routing, installer checks, and
+starting-screen/census checks (including AddressSanitizer and ThreadSanitizer).
+The installer batch was checked textually; cmd.exe execution is unavailable on
+this host. All 65 Swift frontend sources type-checked for iOS.
+
+The default Dock path check initially could not run because the Wine submodule
+source is absent. With `WINE_FILE_C=/tmp/madeira-pinned-wine-file.c`, it passed
+against `dlls/ntdll/unix/file.c` fetched from the exact pinned upstream commit
+`257f271cfffed9f22f7987cac53bc00095d092fe` (SHA-256
+`610bf6d5bc81bc2fcc3c922e1a26aee573b5dcf9059b1ff8d3a2dc97d49fef37`). This is a
+resolver extraction test against upstream source, not the patched native runtime.
+The frontend harness needed its exact callback expectation updated and the
+production storage dependency included; no behavioural assertion was removed.
+
+Source-v12 compiled, linked and passed signature verification before the final
+idle-monitor lifetime review. Source-v13 supersedes it with that last change;
+neither build was installed during the owner's absence. The installed app remains
+source-v11, and no physical gameplay or current card-refresh result is claimed
+from these host tests.
