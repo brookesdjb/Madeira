@@ -504,7 +504,7 @@ final class SteamOwnedLibrary: ObservableObject {
             drive: drive, userFolder: user.url,
             installFolder: installFolder,
             remoteFolder: MadeiraDock.clientRoot.appendingPathComponent("userdata/\(steamID & 0xFFFF_FFFF)/\(appID)/remote", isDirectory: true),
-            steamID: steamID, overrides: info.rootOverrides)
+            steamID: steamID, overrides: info.rootOverrides, externalLibraryRoot: access?.root)
         return (info, paths, access)
     }
 
@@ -541,8 +541,8 @@ final class SteamOwnedLibrary: ObservableObject {
             defer { context.access?.keepAlive() }
             let listing = try await cloudListing(appID)
             let saveFiles = context.info.saveFiles, paths = context.paths, drive = Self.drive
-            let result = await Task.detached(priority: .utility) { () -> (SteamCloudAudit, String?) in
-                let audit = SteamCloudAudit.run(listing: listing, saveFiles: saveFiles, paths: paths)
+            let result = try await Task.detached(priority: .utility) { () throws -> (SteamCloudAudit, String?) in
+                let audit = try SteamCloudAudit.run(listing: listing, saveFiles: saveFiles, paths: paths)
                 // Every cloud file missing and nothing local: the game may keep its saves elsewhere.
                 var elsewhere: String?
                 if audit.cloudFiles > 0, audit.count(.cloudOnly) == audit.cloudFiles, audit.count(.localOnly) == 0,
@@ -629,7 +629,7 @@ final class SteamOwnedLibrary: ObservableObject {
                 guard let place = context.paths.location(cloudPath: entry.path) else { continue }
                 let file = try await cloudFile(appID, entry)
                 try context.access?.validate()
-                let url = SteamCloudPaths.resolve(base: place.base, parts: place.parts)
+                let url = try context.paths.resolve(base: place.base, parts: place.parts)
                 let existed = FileManager.default.fileExists(atPath: url.path)
                 let label = SteamCloudPaths.split(entry.path).root ?? "remote"
                 try SteamCloudTransfer.place(file, at: url, backupTo: backup, relative: [label] + place.parts, time: entry.cloudTime)
@@ -719,7 +719,7 @@ final class SteamOwnedLibrary: ObservableObject {
                 guard !cloudBlocked else { throw CancellationError() }
                 guard let place = context.paths.location(cloudPath: entry.path) else { continue }
                 try context.access?.validate()
-                let url = SteamCloudPaths.resolve(base: place.base, parts: place.parts)
+                let url = try context.paths.resolve(base: place.base, parts: place.parts)
                 let file = try Data(contentsOf: url)
                 guard file.count <= SteamCloudTransfer.maxFileBytes else { throw SteamFileError.invalid("A save is too large to upload.") }
                 let sha = Data(Insecure.SHA1.hash(data: file))

@@ -567,3 +567,21 @@ The regression failed before the estimator fix and passed afterwards; the full
 library suite passed under AddressSanitizer. This verifies host sparse-file
 behaviour and offsets, not an iPad/exFAT/APFS physical large-file test or actual
 low-space exhaustion on the iPad.
+
+## Host follow-up: external GameInstall save containment
+
+A synthetic cloud comparison reproduced following a nested symlink from an SSD
+GameInstall save directory to a file outside the selected library. The external
+cloud context now supplies its library root; case-insensitive save resolution
+validates each existing path component using the storage path validator before
+following it. Local-only enumeration validates candidate saves too. Unsafe paths
+throw and fail the audit before a sync plan or baseline is recorded. Upload and
+download use the same checked resolver. Internal Wine user-folder behaviour is
+unchanged when no external root is supplied.
+
+The cloud host suite now compiles the production storage validator alongside
+its production comparison/planning code. It reproduced the outside-read bug
+before the fix, then passed normal SSD/case-insensitive saves, linked ancestors,
+local-only linked folders/files and dangling destination links after the fix.
+This is synthetic save-path evidence; it does not establish a live Steam Cloud
+upload or conflict-resolution result on iPad.
