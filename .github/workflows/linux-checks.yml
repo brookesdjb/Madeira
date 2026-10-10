@@ -24,12 +24,12 @@ jobs:
     name: Host checks (tests/host)
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           submodules: true
           fetch-depth: 1
       # check-steam-library.py reads zstd through compression.zstd (3.14+).
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: '3.14'
       - name: Tool versions
@@ -43,7 +43,7 @@ jobs:
     name: Native unit tests
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           submodules: true
           fetch-depth: 1
@@ -67,7 +67,7 @@ jobs:
     name: madeira-d3d12 cross-compile
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           submodules: true
           fetch-depth: 1

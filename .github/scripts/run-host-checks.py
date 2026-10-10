@@ -46,8 +46,13 @@ def main():
             print(f'PASS {name} ({took:.1f}s)')
         else:
             failed.append(name)
+            tail = out.rstrip().splitlines()[-40:]
             print(f'FAIL {name} (exit {rc}, {took:.1f}s)')
-            print('\n'.join('    ' + line for line in out.rstrip().splitlines()[-40:]))
+            print('\n'.join('    ' + line for line in tail))
+            if os.environ.get('GITHUB_ACTIONS'):
+                # An annotation shows the failure on the PR without opening the log.
+                msg = '%0A'.join(line.replace('%', '%25') for line in tail[-12:])
+                print(f'::error title={name} failed::{msg}')
     print(f'\n{passed} passed, {len(failed)} failed, {len(skipped)} skipped')
     if failed:
         print('failed: ' + ' '.join(failed))
