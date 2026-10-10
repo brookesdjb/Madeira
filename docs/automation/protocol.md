@@ -1,4 +1,6 @@
-# Experimental XCTest probe protocol v1
+# Experimental XCTest protocols
+
+## Status and JIT probe v1
 
 This is the minimum internal observation/control surface for the JIT milestone,
 not the complete game lifecycle API. Its code is in ContentView.swift to reuse
@@ -33,9 +35,10 @@ the existing loader; the normal developer Hello World test expects exit 0.
 The test pane changes layout and adds UI work, so it is unsuitable for final
 unperturbed performance measurements without further isolation.
 
-`get_status`, `get_runtime_status`, and `get_jit_status` are currently represented
+In v1, `get_status`, `get_runtime_status`, and `get_jit_status` are represented
 by this single snapshot. list_installed_games/launch_game/stop_game/get_game_status,
-virtual input and log streaming are NOT implemented in this protocol. Existing
+virtual input and log streaming are NOT implemented in v1. The A3 command
+extension below adds lifecycle requests. Existing
 host log collection exports a fixed event vocabulary only. Extending commands
 must retain normal launch/cloud-save checks and one-session-per-process behavior.
 
@@ -108,3 +111,5 @@ These commands do not launch/restart/install the app or force-stop it at session
 cleanup. Rejection exits nonzero. Full game-specific readiness/input/exit device
 acceptance remains pending; Portal on the iPad's internal storage is now the
 selected first game, replacing the earlier SSD-dependent Borderlands proposal.
+See [physical game validation](game-validation.md) for the current separation
+between normal-app game observations and command API acceptance.
