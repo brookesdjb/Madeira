@@ -5,7 +5,7 @@ name: Linux checks
 
 on:
   push:
-    branches: [main]
+    branches: [main, integration/ipad]
   pull_request:
   workflow_dispatch:
 
@@ -60,7 +60,7 @@ jobs:
       - name: Automation controller
         run: |
           if [ -d automation/tests ]; then
-            python3 -m pip install --quiet pytest
+            python3 -m pip install --quiet -r automation/requirements.txt
             python3 -m pytest -q automation/tests
           else
             echo "no automation/tests on this branch"
