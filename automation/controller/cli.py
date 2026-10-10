@@ -48,6 +48,9 @@ def parser():
     game.add_argument("--request-id")
     checkpoint = sub.add_parser("game-checkpoint", help="Observe the owned Portal menu; never launch or stop a game")
     checkpoint.add_argument("--seconds", type=int, default=120)
+    telemetry = sub.add_parser("summarize-telemetry", help="Offline raw native submission trace; no device mutation")
+    telemetry.add_argument("trace")
+    telemetry.add_argument("--budget-ms", type=float, default=1000 / 60)
     sub.add_parser("jit-test")
     visual = sub.add_parser("compare-images")
     visual.add_argument("baseline")
@@ -97,6 +100,11 @@ def main(argv=None):
             result = compare_images(args.baseline, args.candidate, args.pixel_threshold, args.changed_fraction, args.crop)
             print(json.dumps(result))
             return 0 if result["status"] == "within_threshold" else 1
+        if args.command == "summarize-telemetry":
+            from .telemetry import export_trace
+            result = export_trace(args.trace, args.output, args.budget_ms)
+            print(json.dumps(result))
+            return 0
         native = DeviceControl()
         if args.command == "devices":
             print(json.dumps({"devices": native.devices()}))
