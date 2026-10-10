@@ -28,7 +28,9 @@ accept those prompts, change accounts, erase data or install certificates.
    On the iPad enable **Settings → Developer → Enable UI Automation** and keep
    the device unlocked. The actual first run here compiled/installed WDA but
    failed during XCTest initialization with “Timed out while enabling automation
-   mode.” This one-time device setting is required by Appium's
+   mode.” The timeout persisted after the owner enabled the switch. Check for
+   a separate XCTest passcode/permission prompt; the timeout alone does not prove
+   that the switch is disabled. This one-time device setting is required by Appium's
    [device preparation guide](https://appium.github.io/appium-xcuitest-driver/latest/getting-started/device-setup/).
 4. Install Python 3.10+ and Node 24 (or a compatible engine listed in
    automation/package.json). From repository root run `make automation-setup`.

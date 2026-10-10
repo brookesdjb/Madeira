@@ -84,10 +84,34 @@ from the owner before another bounded attempt. Failed-run report and original
 xcresult remain local. Startup reports now classify this failure as
 `ui_automation_mode_timeout` without exporting raw diagnostic text.
 
-Host validation: 42 tests passed, 2 physical pytest wrappers skipped. The actual
-physical CLI attempt above failed; it is independent of the host pass count.
-Next: enable UI Automation, repeat smoke, verify identifiers and data protection,
-then continue to JIT coexistence. Onboarding/trust prompts remain manual.
+Second physical attempt at source commit `d3ac8d154a5079d9bb38a582fc355f2074ec28ea`:
+the owner confirmed UI Automation enabled, but XCTest failed with the same
+`ui_automation_mode_timeout`. The private run is
+`automation/runs/20261010T062443.608495Z-88a45f71/report.json` with its current-run
+xcresult and exported diagnostics retained locally. Device inventory confirms
+wired transport; a subsequent lock-state query reports `passcodeRequired=false`
+and `unlockedSinceBoot=true`. Native testmanagerd connected and authorized the
+runner successfully; the runner then timed out waiting for automation mode.
+No Madeira launch, UI action or JIT attempt occurred. No WDA runner process
+remained after failure. These observations do not prove whether an additional
+on-device XCTest permission/passcode prompt was present. The owner has been asked
+to check for that prompt before another attempt. The timeout alone must not be
+reported as proof that the UI Automation switch is disabled.
+
+The installed XCUITest/Xcode/device versions fall within Appium's published
+[support ranges](https://appium.github.io/appium-xcuitest-driver/12.15/getting-started/system-requirements/).
+This does not rule out a device or toolchain fault. No dependency downgrade,
+security bypass, device restart or existing-app termination was performed.
+
+Host validation: 47 tests passed, 2 physical pytest wrappers skipped. Additional
+HTTP fixture cases exercise failed launch, a launch that leaves the app stopped,
+lost session, failed termination and missing-device selection. They confirm bounded
+failure reports, session cleanup and private-error filtering; they are host
+coverage, not physical failure-injection evidence. Both actual physical CLI
+attempts above failed independently of the host pass count.
+Next: resolve the XCTest initialization gate, repeat smoke, verify identifiers
+and data protection, then continue to JIT coexistence. Onboarding/trust prompts
+remain manual.
 
 Keep #9 open until physical smoke, active-game/data preservation and failure
 acceptance are evidenced. #10 JIT coexistence and subsequent lifecycle/input/

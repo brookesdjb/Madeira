@@ -40,6 +40,11 @@ def test_paired_disconnected_device_is_not_connected():
         native_with([raw_device(tunnelState="disconnected")]).select("tablet")
 
 
+def test_missing_device_fails_without_guessing():
+    with pytest.raises(AutomationError, match="select_one_connected"):
+        native_with([]).select()
+
+
 def test_unknown_developer_mode_requires_check():
     raw = raw_device()
     raw["deviceProperties"].pop("developerModeStatus")
@@ -137,7 +142,8 @@ def test_remote_or_credential_bearing_server_rejected(url):
 
 @pytest.fixture
 def appium_server():
-    state = {"calls": [], "app": 1, "fail_settings": False, "session": False}
+    state = {"calls": [], "app": 1, "fail_settings": False, "session": False,
+             "fail_command": None, "launch_stays_stopped": False}
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, *args): pass
         def do_GET(self): self.handle_request()
@@ -152,9 +158,12 @@ def appium_server():
                 value = {"sessionId": "test-session", "capabilities": {}}
             elif self.path.endswith("/execute/sync"):
                 command = body["script"]
-                if command == "mobile: launchApp": state["app"] = 4
-                if command == "mobile: terminateApp": state["app"] = 1
-                if command == "mobile: queryAppState": value = state["app"]
+                if command == state["fail_command"]:
+                    value, status = {"error": "invalid session id", "message": "PRIVATE_DIAGNOSTIC"}, 404
+                else:
+                    if command == "mobile: launchApp" and not state["launch_stays_stopped"]: state["app"] = 4
+                    if command == "mobile: terminateApp": state["app"] = 1
+                    if command == "mobile: queryAppState": value = state["app"]
             elif self.path.endswith("/element"):
                 value = {ELEMENT: body["value"]}
             elif self.path.endswith("madeira.tab.settings/click") and state["fail_settings"]:
@@ -233,3 +242,25 @@ def test_smoke_preserves_preexisting_running_app(appium_server, tmp_path):
     assert report["status"] == "failed"
     assert state["app"] == 4
     assert not any(c[2] and c[2].get("script") == "mobile: terminateApp" for c in state["calls"])
+
+
+@pytest.mark.parametrize("failure,failed_step", [
+    ("mobile: launchApp", "launch"),
+    ("stopped", "verify_foreground"),
+    ("mobile: terminateApp", "terminate"),
+    ("mobile: queryAppState", None),
+])
+def test_lifecycle_failure_retains_report_and_closes_session(appium_server, tmp_path, failure, failed_step):
+    url, state = appium_server
+    state["launch_stays_stopped"] = failure == "stopped"
+    state["fail_command"] = None if failure == "stopped" else failure
+    client = AppiumController(url)
+    client.connect("tablet", "test.madeira")
+    report = Run(client, NativeLog(), {"udid": "tablet"}, "test.madeira", tmp_path).smoke()
+    assert report["status"] == "failed"
+    if failed_step:
+        assert any(s["name"] == failed_step and s["status"] == "failed" for s in report["steps"])
+    assert state["session"] is False and client.session is None
+    assert "PRIVATE_DIAGNOSTIC" not in (tmp_path / "report.json").read_text()
+    if failure in ("mobile: launchApp", "mobile: queryAppState"):
+        assert not any(c[2] and c[2].get("script") == "mobile: terminateApp" for c in state["calls"])
