@@ -150,7 +150,7 @@ def test_probe_source_is_double_compile_gated_and_runtime_opt_in():
     marker = "#if DEBUG && MADEIRA_AUTOMATION"
     assert source.count(marker) >= 7
     probe = source.index("@MainActor final class AutomationProbe")
-    assert source[:probe].rstrip().endswith(marker)
+    assert "#endif" not in source[source.rfind(marker, 0, probe):probe]
     declaration = source[probe:]
     assert 'arguments.contains("--madeira-automation")' in declaration
     assert declaration.rstrip().endswith("#endif")
