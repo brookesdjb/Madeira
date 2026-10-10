@@ -35,3 +35,10 @@ continuation above now has direct session evidence. Direct Git push lacked crede
 published to the user-authorized `brookesdjb/Madeira` branch
 `codex/physical-ipad-automation` through the GitHub connector, with identical Git
 trees and different commit metadata. No default branch or upstream change.
+
+## Performance consumer progress
+
+A bounded offline native submission-trace consumer is implemented and host-tested
+for issues #2/#14. It validates the shared version 1 contract and exports private
+raw/summary reports. This does not implement raw native collection, GPU/CPU
+attribution, virtual input, repeated trials or an iPad performance baseline.
