@@ -132,6 +132,14 @@ static unsigned g_enc_seq, g_list_seq, g_dump_draws;
 static volatile LONG g_pass_begun, g_pass_end_rts, g_pass_end_clear, g_pass_end_dispatch, g_pass_end_blit, g_pass_end_list,
                      g_pass_end_attachless, g_pass_clear_only, g_pass_reused;
 static volatile LONG64 g_pass_attach_bytes;
+/* G8 (issue #32): UPLOAD-COPY CENSUS. ARCHITECTURE answers UMA=FALSE (ml1038), so
+ * an engine stages what it streams in a CPU-visible buffer and copies it into a
+ * GPU-private resource. Count those copies as executed, and the texture Maps this
+ * runtime refuses, to size what mappable textures plus UMA=TRUE would save.
+ * Texture bytes are the footprint the copy reads (row pitch x rows x depth), an
+ * upper bound when a source box crops it. */
+static volatile LONG g_up_b2t_n, g_up_bb_n, g_map_tex_refused;
+static volatile LONG64 g_up_b2t_bytes, g_up_bb_bytes;
 static int g_census_on;   /* ml899: one frame at presents 1500,1700,...,2800 */
 /* ml1098: MANUAL FRAME CAPTURE. The UI asks (MadeiraCtl op 0); the next frame
  * has every render pass that drew something followed by a blit of each of its
@@ -4408,6 +4416,10 @@ static void exec_copy(struct mad_exec *e, const struct mad_cmd *c) {
         k.dst = c->u.bb.dst->buffer; k.dst_offset = c->u.bb.doff;
         k.copy_length = c->u.bb.len;
         MTLBlitCommandEncoder_encodeCommands(e->benc, (const struct wmtcmd_base *)&k);
+        if (c->u.bb.src->cpu && !c->u.bb.dst->cpu) {   /* G8: staged upload into GPU-private memory */
+            InterlockedIncrement(&g_up_bb_n);
+            InterlockedExchangeAdd64(&g_up_bb_bytes, (LONG64)c->u.bb.len);
+        }
         return;
     }
     case MC_COPY_B2T: {
@@ -4422,6 +4434,10 @@ static void exec_copy(struct mad_exec *e, const struct mad_cmd *c) {
         k.origin.x = c->u.bt.x; k.origin.y = c->u.bt.y; k.origin.z = c->u.bt.z;
         k.reserved[0] = (uint16_t)mad_aspect_opt(c->u.bt.tex, c->u.bt.plane);   /* the MTLBlitOption, see exec_copy_aspect */
         MTLBlitCommandEncoder_encodeCommands(e->benc, (const struct wmtcmd_base *)&k);
+        if (c->u.bt.buf->cpu) {   /* G8: a texture upload staged in a CPU-visible buffer */
+            InterlockedIncrement(&g_up_b2t_n);
+            InterlockedExchangeAdd64(&g_up_b2t_bytes, (LONG64)c->u.bt.row * c->u.bt.rows * (c->u.bt.d ? c->u.bt.d : 1));
+        }
         return;
     }
     case MC_COPY_T2B: {
@@ -4822,6 +4838,11 @@ static void mad_exec_list(struct mad_queue *q, struct mad_list *l, obj_handle_t 
                       InterlockedExchange(&g_pass_end_clear, 0), InterlockedExchange(&g_pass_end_dispatch, 0), InterlockedExchange(&g_pass_end_blit, 0),
                       InterlockedExchange(&g_pass_end_list, 0), InterlockedExchange(&g_pass_end_attachless, 0), InterlockedExchange(&g_pass_clear_only, 0),
                       (long long)(InterlockedExchange64(&g_pass_attach_bytes, 0) >> 20));
+            d3d12_log("[madeira-d3d12] G8 staged uploads in those lists: %ld buffer->texture copies (~%lld KB footprint), "
+                      "%ld buffer->buffer copies into GPU-private buffers (%lld KB); texture Maps refused so far %ld\n",
+                      InterlockedExchange(&g_up_b2t_n, 0), (long long)(InterlockedExchange64(&g_up_b2t_bytes, 0) >> 10),
+                      InterlockedExchange(&g_up_bb_n, 0), (long long)(InterlockedExchange64(&g_up_bb_bytes, 0) >> 10),
+                      g_map_tex_refused);
             if ((n % 3000) == 0) mad_skip_report();   /* ml1049 */
         }
     }
@@ -7222,6 +7243,7 @@ static HRESULT STDMETHODCALLTYPE res_Map(ID3D12Resource *This, UINT sub,
      * a stale stack value is a wild write, NULL is at least an honest fault. */
     if (sub != 0 || !r->cpu) {
         static LONG said;
+        if (r->texture) InterlockedIncrement(&g_map_tex_refused);   /* G8 */
         if (InterlockedIncrement(&said) <= 24)
             d3d12_log("[madeira-d3d12] ml1038 Map REFUSED: %s sub=%u (%s, %ux%u) -- this runtime has no "
                       "CPU-visible storage for it\n",
