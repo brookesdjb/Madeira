@@ -92,3 +92,58 @@ must separately supply source/dirty state, installed binary hashes, submodule
 pins, device model/OS, game/scene, resolution/settings, capture policy,
 warmup/measurement duration, cache state, thermal conditions and exit evidence.
 Private IDs and credentials must stay out of shared reports.
+
+## Comparing iterations (issue #15, offline part)
+
+`benchmark-compare` compares independent iterations offline and never touches a
+device. It does not run a benchmark. The runner that writes these records
+does not exist yet.
+
+```sh
+python -m automation.controller.cli benchmark-compare \
+  --baseline runs/a/iteration-*.json --candidate runs/b/iteration-*.json
+```
+
+Each file is one version 1 iteration record with exactly these keys:
+
+- `conditions`: `device_model`, `os_version`, `game`, `scene`, `resolution`,
+  `settings_digest`, `runtime_config_digest`, `capture_policy` and
+  `cache_phase` (`cold`, `disk_warm` or `process_warm`). These must be
+  identical within and across both sides, otherwise the result is
+  `inconclusive` and the differing fields are listed.
+- `source`: `commit`, `dirty` and installed `binary_sha256`. Each must be
+  uniform within a side. A dirty source becomes a caveat.
+- `order_index`: the iteration's position in the whole session. If all
+  baseline iterations ran before all candidate ones (or the reverse), the
+  order is `blocked` and an improved or regressed verdict is capped at
+  `inconclusive`. Use interleaved AB/BA order.
+- `outcome` (`completed`, `startup_failed`, `jit_failed`, `disconnected`,
+  `crashed` or `timed_out`), `thermal_state_start` and `thermal_state_end`
+  (public `ProcessInfo.ThermalState` names), and `visual_status` (from
+  `compare-captures`, or null).
+- `metrics`: any subset of `submission_interval_p50_ms`, `_p95_ms`, `_p99_ms`
+  and `submission_rate_hz` (from `telemetry-summary.json`; this is submission
+  cadence, not visible FPS), plus `loading_ms`, `footprint_peak_bytes` and
+  `mean_cpu_cores`. Values are null when unavailable. Failed iterations must
+  carry no metrics.
+
+Only completed iterations whose thermal states stayed `nominal` or `fair` enter
+a distribution. Excluded iterations are counted. For each metric the tool
+needs at least `--min-iterations` (default 5) per side. If either side's
+coefficient of variation exceeds `--max-cv` (default 0.15), the metric is too
+noisy. Otherwise it computes a seeded bootstrap 95% interval of the relative
+median difference. Verdicts:
+
+- `improved` or `regressed`: the whole interval is beyond `--min-effect`
+  (default 3%) in one direction.
+- `no_meaningful_difference`: the whole interval is inside ±min-effect.
+- `inconclusive`: anything else.
+
+The overall status is `review` when the candidate has more failed iterations
+or more visual reviews than the baseline. Otherwise it is `regressed` if any
+metric regressed, `inconclusive` if any metric is, then `improved`, then
+`no_meaningful_difference`. Exit codes: 0 for improved or no meaningful
+difference, 1 for regressed or review, 3 for inconclusive, 2 for invalid
+input. The report always states `attribution: not_established`, because
+differences can come from device, thermal, cache or scene variation as well
+as source changes.

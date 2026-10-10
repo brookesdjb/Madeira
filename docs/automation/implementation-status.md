@@ -14,7 +14,7 @@ See [Mac validation](mac-validation.md) for current verified results and gates.
 | 4 game input | Existing integration points mapped | None | Virtual source, bounded release, recorder/replay; no direct bridge writes added | NOT TESTED |
 | 5 visual checks | External screenshots, run association, crop/threshold comparison and suspected blank detection; English Portal menu recognition | Synthetic-image tests and live Portal checkpoint pass; actual Source splash rejected; game/menu/overlay pixels inspected | Broad Metal fidelity, gameplay checkpoints and per-game threshold calibration | PORTAL MENU OBSERVED |
 | 6 performance | Existing telemetry mapped, no new counters | None | Real per-frame instrumentation and explicit CPU/GPU distinction | NOT TESTED |
-| 7 benchmarks | Deferred | None | Requires trustworthy launch readiness/input/measurements; do not benchmark sleeps or fake FPS | NOT TESTED |
+| 7 benchmarks | Offline `benchmark-compare` over versioned iteration records (see benchmarks.md); runner deferred | 11 synthetic host tests | Runner, iteration-record producer and paired physical trials; do not benchmark sleeps or fake FPS | NOT TESTED |
 | 8 agent integration | make setup/check/build/install/smoke/jit, JSON actions, exit codes | Host failures/current unlock gate tested; UI and standalone built-in JIT proof observed | Standalone lifecycle repeats pass; full-game lifecycle, input and benchmarks remain; no infinite retries | PARTIAL |
 
 Physical UI smoke now passes on the provisioned USB iPad; source, binary and
