@@ -28,8 +28,13 @@ maintain its lease heartbeat. Automatic snapshot refresh must not count as a
 host heartbeat. An inactive/menu/cloud-held session never receives replay input.
 
 Host validation covers the actual Swift command/plan parser and Python's
-preflight validator. Physical keyboard/mouse/pad response, focus interruption,
-heartbeat release and a reproducible gameplay checkpoint remain separate gates.
+preflight validator. Physical Portal keyboard/menu navigation, existing-save load, relative mouse
+camera response and native HOST_TIMEOUT interruption were observed on the wired
+M5 iPad on 2026-10-10. Nonzero virtual-pad commands were accepted but Portal did
+not visibly respond to the stick sample. Pad response, focus/background injection,
+independent release verification and a broader gameplay checkpoint remain gates.
+The host waits for a newer status publication after Refresh; XCTest previously
+returned the prior replay status immediately after a click.
 
 ## On-device measurement window
 
@@ -46,3 +51,11 @@ fail; they cannot reuse a prior export as a successful benchmark.
 Capture establishes telemetry, not gameplay readiness or an optimization result.
 A paired experiment still needs matched scenes/cache/thermal conditions, source
 and installed-binary manifests, multiple independent trials and sustained tests.
+
+The runner now also copies the bounded process-counter sidecar, requires the same
+capture ID as the submission trace, and reports mean CPU cores from whole-app
+user plus system CPU over the measured wall window. Missing counters remain null.
+Native wake-policy evidence is optional when W1 is absent; a W1 arm requires its
+initialized mode to equal the requested setting. Launch experiments accept only
+explicit whitelisted profiler/cache/wake switches and the planned FEX block sizes,
+with the existing running-app refusal and fresh PID verification.
