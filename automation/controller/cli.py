@@ -39,6 +39,12 @@ def parser():
     visual.add_argument("--pixel-threshold", type=int, default=20)
     visual.add_argument("--changed-fraction", type=float, default=0.1)
     visual.add_argument("--crop", type=int, nargs=4)
+    visual.add_argument("--mask", type=int, nargs=4, action="append", help="Ignore a dynamic region; full-image x0 y0 x1 y1")
+    visual.add_argument("--difference-output", help="New PNG: changed pixels red, ignored regions blue")
+    captures = sub.add_parser("compare-captures")
+    captures.add_argument("baseline", help="captures.json from the baseline run")
+    captures.add_argument("candidate", help="captures.json from the candidate run")
+    captures.add_argument("--calibration", help="Versioned per-checkpoint crop/mask/threshold JSON")
     return p
 
 
@@ -78,7 +84,14 @@ def main(argv=None):
             return 2 if result["blockers"] else 0
         if args.command == "compare-images":
             from .images import compare_images
-            result = compare_images(args.baseline, args.candidate, args.pixel_threshold, args.changed_fraction, args.crop)
+            result = compare_images(args.baseline, args.candidate, args.pixel_threshold, args.changed_fraction, args.crop,
+                                    args.mask, args.difference_output)
+            print(json.dumps(result))
+            return 0 if result["status"] == "within_threshold" else 1
+        if args.command == "compare-captures":
+            from .capture_evidence import compare_captures, load_calibration
+            calibration = load_calibration(args.calibration) if args.calibration else None
+            result = compare_captures(args.baseline, args.candidate, args.output, calibration)
             print(json.dumps(result))
             return 0 if result["status"] == "within_threshold" else 1
         native = DeviceControl()
