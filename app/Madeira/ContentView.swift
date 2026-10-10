@@ -4697,7 +4697,17 @@ struct MappingPanel: View {
         sequence += 1
         let jit = JITCoordinator.shared
         let model = LibraryModel.shared
-        let manual = model.cloudNotice != nil || model.restartNotice != nil || model.jitNotice != nil
+        var manual = model.cloudNotice != nil || model.restartNotice != nil || model.jitNotice != nil
+        // A sheet transition can dismiss the alert without resolving its hold.
+        // Observe the underlying save gate, not only the alert's presentation.
+        if launchRequested, model.current == nil, let id = ownedGame,
+           let appID = model.entries.first(where: { $0.id == id })?.steamAppID,
+           let hold = SteamOwnedLibrary.shared.cloudHold(appID) {
+            switch hold {
+            case .unchecked, .conflict: manual = true
+            case .syncing, .stale: break
+            }
+        }
         let phase = manual ? "MANUAL_INTERVENTION_REQUIRED" : (model.error != nil ? "ERROR" :
             (model.current != nil ? (stopRequested ? "STOP_REQUESTED" : "SESSION_OBSERVED") :
                 (LibraryModel.sessionsThisRun > 0 ?
