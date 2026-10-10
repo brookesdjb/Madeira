@@ -73,6 +73,9 @@ Send; an unavailable reply reports that the request may already have run.
 Dispatch restores the normal app's key window before calling the launch path.
 Otherwise Winios would attach its compositor to the command editor's window
 and cover the controls with the guest desktop.
+Because reads can focus the editor during asynchronous startup, opted-in Debug
+also anchors the compositor to the actual Metal presentation window. The native
+anchor symbol is absent from normal Debug and Release binaries.
 
 ```json
 {"schema_version":2,"request_id":"launch-001","operation":"launch_game","steam_app_id":400}
@@ -94,8 +97,8 @@ ContentView.launchLibraryEntry, retaining the normal storage validation, launch
 profile, Steam Dock and cloud-save gates. The reply `accepted/launch_requested`
 only acknowledges the request; it is not readiness. Status distinguishes IDLE,
 LAUNCH_REQUESTED, SESSION_OBSERVED, STOP_REQUESTED, SESSION_ENDING, EXITED, ERROR
-and MANUAL_INTERVENTION_REQUIRED. Readiness remains NOT_VERIFIED until a separate
-game-specific checkpoint is implemented/observed; neither elapsed time nor
+and MANUAL_INTERVENTION_REQUIRED. App readiness remains NOT_VERIFIED; the
+separate host checkpoint below reports its own menu observation. Neither elapsed time nor
 present counters prove game readiness. Error output uses fixed codes, not private
 messages. list_installed_games reports existing configured entries supported by
 current installed Steam metadata or an internal executable check.
@@ -120,8 +123,9 @@ python -m automation.controller.cli game-command stop_game --steam-app-id 400
 ```
 
 These commands do not launch/restart/install the app or force-stop it at session
-cleanup. Rejection exits nonzero. Full game-specific readiness/input/exit device
-acceptance remains pending; Portal on the iPad's internal storage is now the
+cleanup. Rejection exits nonzero. Portal API launch, replay/second-session
+rejection and the menu checkpoint are physically observed. Full gameplay,
+virtual input and API exit completion remain open; Portal on internal storage is the
 selected first game, replacing the earlier SSD-dependent Borderlands proposal.
 See [physical game validation](game-validation.md) for the current separation
 between normal-app game observations and command API acceptance.

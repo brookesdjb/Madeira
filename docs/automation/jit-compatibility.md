@@ -185,3 +185,13 @@ native automation fixture. Existing normal SSD app/data remain untouched.
 The owner subsequently selected local storage instead of the SSD. Portal is
 installed in the existing app's internal Steam library as the next lifecycle/input
 target; no full-game result is claimed by the standalone JIT runs.
+
+
+## Installed-game continuation
+
+A3 now observes built-in JIT activation followed by normal guest runtime startup
+and the rendered Portal menu on internal storage. The host menu checkpoint
+passes on two fresh same-process screenshots. This extends the standalone proof
+with a real game menu; it does not establish virtual input, gameplay or benchmark
+compatibility. See [game validation](game-validation.md) for tested source,
+installed binary identity, preserved saves and the API-stop limitation.
