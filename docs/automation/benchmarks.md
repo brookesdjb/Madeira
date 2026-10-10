@@ -139,11 +139,19 @@ median difference. Verdicts:
 - `no_meaningful_difference`: the whole interval is inside ±min-effect.
 - `inconclusive`: anything else.
 
-The overall status is `review` when the candidate has more failed iterations
-or more visual reviews than the baseline. Otherwise it is `regressed` if any
+The overall status is `review` when either arm has any failed iteration or
+visual review, even if both arms have the same count. An inconclusive visual
+check makes the overall result `inconclusive`. Null visual status permits a
+timing-only comparison and adds `visual_acceptance_not_established`; it never
+establishes visual acceptance. Otherwise the status is `regressed` if any
 metric regressed, `inconclusive` if any metric is, then `improved`, then
 `no_meaningful_difference`. Exit codes: 0 for improved or no meaningful
 difference, 1 for regressed or review, 3 for inconclusive, 2 for invalid
 input. The report always states `attribution: not_established`, because
 differences can come from device, thermal, cache or scene variation as well
 as source changes.
+
+This first version supports source/binary comparisons with unchanged runtime
+configuration. W1, cache and F2 flag experiments intentionally change that
+configuration and remain unsupported: do not falsify equal digests to use this
+command. They need a future declared-variable schema and runner integration.

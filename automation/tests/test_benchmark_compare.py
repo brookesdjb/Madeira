@@ -118,3 +118,62 @@ def test_cli_writes_report_and_uses_exit_status(tmp_path, capsys):
     assert json.loads(open(result["report_path"]).read())["metrics"][0]["verdict"] == "regressed"
     (tmp_path / "dup.json").write_text('{"schema_version": 1, "schema_version": 1}')
     assert main(["--output", str(tmp_path / "runs"), "benchmark-compare", "--baseline", str(tmp_path / "dup.json"), "--candidate", *paths["cand"]]) == 2
+
+
+@pytest.mark.parametrize("visual,status", [("review", "review"), ("inconclusive", "inconclusive")])
+@pytest.mark.parametrize("side", ["baseline", "candidate", "both"])
+def test_unresolved_visual_checks_never_pass(visual, status, side):
+    base, cand = paired([20] * 5, [10] * 5)
+    for items in ([base] if side == "baseline" else [cand] if side == "candidate" else [base, cand]):
+        for item in items:
+            item["visual_status"] = visual
+    assert b.compare(base, cand)["status"] == status
+
+
+def test_equal_failures_do_not_cancel_out():
+    base, cand = paired([20] * 6, [10] * 6)
+    base[-1] = iteration(10, None, outcome="crashed")
+    cand[-1] = iteration(11, None, CAND, outcome="crashed")
+    assert b.compare(base, cand)["status"] == "review"
+
+
+def test_unchecked_visuals_are_explicitly_timing_only():
+    report = b.compare(*paired([20] * 5, [10] * 5))
+    assert report["status"] == "improved"
+    assert "visual_acceptance_not_established" in report["caveats"]
+
+
+def test_zero_metrics_produce_standard_json():
+    for base_values, cand_values in (([0] * 5, [0] * 5), ([20] * 5, [0] * 5), ([0, 0, 20, 20, 20], [10] * 5)):
+        json.dumps(b.compare(*paired(base_values, cand_values)), allow_nan=False)
+
+
+@pytest.mark.parametrize("change", [{"outcome": []}, {"visual_status": {}}, {"thermal_state_end": []},
+                                    {"metrics": {"submission_interval_p95_ms": float("nan")}}])
+def test_public_compare_validates_records(change):
+    base, cand = paired([20] * 5, [10] * 5)
+    cand[0].update(change)
+    with pytest.raises(AutomationError):
+        b.compare(base, cand)
+
+
+@pytest.mark.parametrize("options", [{"resamples": 0}, {"resamples": True}, {"resamples": 10001},
+                                     {"seed": -1}, {"seed": True}])
+def test_bootstrap_options_are_bounded(options):
+    with pytest.raises(AutomationError):
+        b.compare(*paired([20] * 5, [10] * 5), **options)
+
+
+def test_flag_experiments_remain_fail_closed():
+    base, cand = paired([20] * 5, [10] * 5, runtime_config_digest="w1-on")
+    report = b.compare(base, cand)
+    assert report["status"] == "inconclusive"
+    assert report["mismatched_conditions"] == ["runtime_config_digest"]
+
+
+@pytest.mark.parametrize("key,value", [("commit", "z" * 40), ("binary_sha256", "g" * 64)])
+def test_source_hashes_must_be_hex(key, value):
+    item = iteration(0, 20)
+    item["source"][key] = value
+    with pytest.raises(AutomationError, match="invalid_iteration_source"):
+        b.validate_iteration(item)

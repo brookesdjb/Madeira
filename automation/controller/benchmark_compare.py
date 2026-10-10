@@ -3,6 +3,7 @@ import json
 import math
 from pathlib import Path
 import random
+import re
 import statistics
 
 from .device import AutomationError
@@ -42,15 +43,18 @@ def validate_iteration(value):
         raise AutomationError("invalid_iteration_conditions")
     source = value["source"]
     if (not isinstance(source, dict) or set(source) != {"commit", "dirty", "binary_sha256"}
-            or not isinstance(source["commit"], str) or len(source["commit"]) != 40
+            or not isinstance(source["commit"], str) or re.fullmatch(r"[0-9a-f]{40}", source["commit"]) is None
             or type(source["dirty"]) is not bool or not isinstance(source["binary_sha256"], str)
-            or len(source["binary_sha256"]) != 64):
+            or re.fullmatch(r"[0-9a-f]{64}", source["binary_sha256"]) is None):
         raise AutomationError("invalid_iteration_source")
     if not _integer(value["order_index"]):
         raise AutomationError("invalid_iteration_order")
-    if value["outcome"] not in OUTCOMES or value["visual_status"] not in VISUAL:
+    if (not isinstance(value["outcome"], str) or value["outcome"] not in OUTCOMES
+            or (value["visual_status"] is not None and not isinstance(value["visual_status"], str))
+            or value["visual_status"] not in VISUAL):
         raise AutomationError("invalid_iteration_outcome")
-    if value["thermal_state_start"] not in THERMAL or value["thermal_state_end"] not in THERMAL:
+    if any(not isinstance(value[k], str) or value[k] not in THERMAL
+           for k in ("thermal_state_start", "thermal_state_end")):
         raise AutomationError("invalid_iteration_thermal_state")
     metrics = value["metrics"]
     if not isinstance(metrics, dict) or not set(metrics) <= set(METRICS):
@@ -108,12 +112,14 @@ def _compare_metric(name, base, cand, min_iterations, min_effect, max_cv, resamp
     cv = {}
     for side, values in (("baseline", base), ("candidate", cand)):
         mean = statistics.fmean(values)
-        cv[side] = statistics.stdev(values) / mean if mean else math.inf
+        cv[side] = statistics.stdev(values) / mean if mean else 0.0
     result["coefficient_of_variation"] = cv
     if not result["baseline_median"]:
         return {**result, "verdict": "inconclusive", "reason": "zero_baseline"}
     result["relative_median_difference"] = result["candidate_median"] / result["baseline_median"] - 1
     low, high = _median_difference_interval(base, cand, resamples, seed)
+    if not math.isfinite(low) or not math.isfinite(high):
+        return {**result, "verdict": "inconclusive", "reason": "unbounded_bootstrap_interval"}
     result["bootstrap_95_interval"] = [low, high]
     if max(cv.values()) > max_cv:
         return {**result, "verdict": "inconclusive", "reason": "too_noisy"}
@@ -133,6 +139,12 @@ def compare(baseline, candidate, min_iterations=5, min_effect=0.03, max_cv=0.15,
             raise AutomationError("invalid_comparison_threshold")
     if not 1 <= len(baseline) <= MAX_ITERATIONS or not 1 <= len(candidate) <= MAX_ITERATIONS:
         raise AutomationError("invalid_iteration_count")
+    if type(resamples) is not int or not 100 <= resamples <= 10000:
+        raise AutomationError("invalid_resamples")
+    if not _integer(seed):
+        raise AutomationError("invalid_seed")
+    for item in baseline + candidate:
+        validate_iteration(item)
     report = {"schema_version": 1, "attribution": "not_established",
               "note": "Differences can come from device, thermal, cache or scene variation as well as source changes.",
               "caveats": []}
@@ -167,6 +179,8 @@ def compare(baseline, candidate, min_iterations=5, min_effect=0.03, max_cv=0.15,
         outcomes[side] = {"iterations": len(items),
                           "by_outcome": {o: sum(i["outcome"] == o for i in items) for o in sorted(OUTCOMES)},
                           "visual_review": sum(i["visual_status"] == "review" for i in items),
+                          "visual_inconclusive": sum(i["visual_status"] == "inconclusive" for i in items),
+                          "visual_unchecked": sum(i["visual_status"] is None for i in items),
                           "excluded_thermal": len(hot)}
         usable[side] = [i for i in items if i["outcome"] == "completed" and i not in hot]
     report["outcomes"] = outcomes
@@ -185,8 +199,13 @@ def compare(baseline, candidate, min_iterations=5, min_effect=0.03, max_cv=0.15,
             if r["verdict"] in ("improved", "regressed"):
                 r["verdict"], r["reason"] = "inconclusive", "blocked_order"
         verdicts = {r["verdict"] for r in results}
-    if failures["candidate"] > failures["baseline"] or outcomes["candidate"]["visual_review"] > outcomes["baseline"]["visual_review"]:
+    # Absolute evidence gates: equal failures/reviews in both arms do not cancel out.
+    if any(o["visual_unchecked"] for o in outcomes.values()):
+        report["caveats"].append("visual_acceptance_not_established")
+    if any(failures.values()) or any(o["visual_review"] for o in outcomes.values()):
         status = "review"
+    elif any(o["visual_inconclusive"] for o in outcomes.values()):
+        status = "inconclusive"
     elif "regressed" in verdicts:
         status = "regressed"
     elif not results or "inconclusive" in verdicts:
