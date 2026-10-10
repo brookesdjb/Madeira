@@ -83,6 +83,11 @@ def build_app(root, bundle_id, team=None, configuration="Debug", automation=Fals
     try:
         report["source_commit"] = subprocess.check_output(["git", "-C", str(root), "rev-parse", "HEAD"], text=True).strip()
         report["source_dirty"] = bool(subprocess.check_output(["git", "-C", str(root), "status", "--porcelain"], text=True))
+        # Partial native replacements must not leave an old and a new owner
+        # of the same entry point: archive order can silently select stale code.
+        if all((root / "app/Madeira" / name).is_file() for name in ("libwineserver.a", "libntdll_unix.a")):
+            from .native_archives import inspect_native_inputs
+            report["native_inputs"] = inspect_native_inputs(root)
         with log.open("w") as output:
             os.chmod(log, 0o600)
             # Existing bundle phases rewrite/re-sign nested resources every
