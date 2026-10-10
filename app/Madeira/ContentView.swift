@@ -1285,6 +1285,13 @@ struct ContentView: View {
                     developerBody
                 }
             }
+            #if DEBUG && MADEIRA_AUTOMATION
+            .safeAreaInset(edge: .bottom) {
+                if AutomationProbe.enabled {
+                    AutomationProbePanel(enableJIT: enableJIT, runFEX: runFEXTest)
+                }
+            }
+            #endif
             .navigationTitle("Madeira")
             .navigationBarTitleDisplayMode(.inline)
             .toolbarBackground(.regularMaterial, for: .navigationBar)
@@ -2340,6 +2347,9 @@ struct ContentView: View {
             let result = fex_test_execute()
 
             DispatchQueue.main.async {
+                #if DEBUG && MADEIRA_AUTOMATION
+                if AutomationProbe.enabled { AutomationProbe.shared.completeFEX(result) }
+                #endif
                 switch result {
                 case 42:
                     jitStatus = .available
@@ -4615,3 +4625,94 @@ struct MappingPanel: View {
         .buttonStyle(.plain)
     }
 }
+
+
+#if DEBUG && MADEIRA_AUTOMATION
+/// Narrow XCTest-accessible probe, compiled out unless BOTH flags are set.
+/// No socket, URL handler, arbitrary code evaluation or account operations.
+@MainActor final class AutomationProbe: ObservableObject {
+    static let enabled = ProcessInfo.processInfo.arguments.contains("--madeira-automation")
+    static let shared = AutomationProbe()
+    @Published private(set) var snapshot = "{}"
+    private var fexState = "NOT_RUN"
+    private var result: Int64?
+    private var sequence = 0
+
+    func refresh() {
+        sequence += 1
+        let jit = JITCoordinator.shared
+        let model = LibraryModel.shared
+        let data: [String: Any] = [
+            "schema_version": 1,
+            "sequence": sequence,
+            "timestamp": ISO8601DateFormatter().string(from: Date()),
+            "pid": Int(getpid()),
+            "state": jit.busy ? "INITIALIZING_JIT" : (model.current != nil ? "SESSION_ACTIVE" : "APP_IDLE"),
+            "jit_ready": StikJITHelper.ready,
+            "jit_debugged": SigningStatus.current.debugged,
+            "debugger_attached": isDebuggerAttached(),
+            "launch_pool_allocated": StikJITHelper.poolTaken,
+            "jit_busy": jit.busy,
+            "jit_error": jit.error != nil,
+            "jit_method": jit.resolvedMethod.rawValue,
+            "wine_running": wine_process_is_running() != 0,
+            "wineserver_running": wineserver_is_running() != 0,
+            "wineserver_ready": wineserver_is_ready() != 0,
+            "present_count": madeira_get_present_count(),
+            "thermal_state": DeviceLoadDiagnostics.thermalName(ProcessInfo.processInfo.thermalState),
+            "fex_test": fexState,
+            "fex_result": result.map { NSNumber(value: $0) as Any } ?? NSNull()
+        ]
+        guard let encoded = try? JSONSerialization.data(withJSONObject: data, options: [.sortedKeys]),
+              let text = String(data: encoded, encoding: .utf8) else { return }
+        snapshot = text
+    }
+
+    func beginFEX(_ run: () -> Void) {
+        // A dedicated, fresh process is required. Never run a probe over a game.
+        guard Self.enabled, fexState == "NOT_RUN", StikJITHelper.ready, isDebuggerAttached(),
+              !JITCoordinator.shared.busy, LibraryModel.shared.current == nil,
+              wine_process_is_running() == 0, wineserver_is_running() == 0 else { return }
+        fexState = "RUNNING"
+        refresh()
+        run() // Existing ContentView.runFEXTest -> fex_test_execute, no new startup path.
+    }
+
+    func completeFEX(_ value: Int64) {
+        result = value
+        fexState = value == 42 ? "PASSED" : "FAILED"
+        refresh()
+    }
+}
+
+private struct AutomationProbePanel: View {
+    let enableJIT: () -> Void
+    let runFEX: () -> Void
+    @ObservedObject private var probe = AutomationProbe.shared
+
+    var body: some View {
+        VStack(spacing: 4) {
+            Text("Development automation")
+                .accessibilityIdentifier("madeira.automation.status")
+                .accessibilityValue(probe.snapshot)
+            HStack {
+                Button("Refresh") { probe.refresh() }
+                    .accessibilityIdentifier("madeira.automation.refresh")
+                Button("Enable JIT") {
+                    guard !JITCoordinator.shared.busy, LibraryModel.shared.current == nil,
+                          wine_process_is_running() == 0 else { return }
+                    enableJIT()
+                    probe.refresh()
+                }
+                .accessibilityIdentifier("madeira.automation.enable-jit")
+                Button("Test FEX") { probe.beginFEX(runFEX) }
+                    .accessibilityIdentifier("madeira.automation.test-fex")
+            }
+            .buttonStyle(.bordered)
+        }
+        .padding(6)
+        .background(.regularMaterial)
+        .onAppear { probe.refresh() }
+    }
+}
+#endif

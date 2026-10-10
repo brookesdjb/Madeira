@@ -33,6 +33,12 @@ def parser():
     actions = sub.add_parser("actions")
     actions.add_argument("file", help="JSON array of UI actions; one persistent Appium session")
     sub.add_parser("jit-test")
+    visual = sub.add_parser("compare-images")
+    visual.add_argument("baseline")
+    visual.add_argument("candidate")
+    visual.add_argument("--pixel-threshold", type=int, default=20)
+    visual.add_argument("--changed-fraction", type=float, default=0.1)
+    visual.add_argument("--crop", type=int, nargs=4)
     return p
 
 
@@ -70,6 +76,11 @@ def main(argv=None):
             result = doctor()
             print(json.dumps(result))
             return 2 if result["blockers"] else 0
+        if args.command == "compare-images":
+            from .images import compare_images
+            result = compare_images(args.baseline, args.candidate, args.pixel_threshold, args.changed_fraction, args.crop)
+            print(json.dumps(result))
+            return 0 if result["status"] == "within_threshold" else 1
         native = DeviceControl()
         if args.command == "devices":
             print(json.dumps({"devices": native.devices()}))

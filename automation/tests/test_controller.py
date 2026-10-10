@@ -163,3 +163,14 @@ def test_input_constraints_fail_before_network():
 def test_log_export_is_fixed_vocabulary_only():
     events = diagnostic_events("password=hunter2\nFEX-Emu test PASSED: x86-64 code returned 42! token=SECRET\n")
     assert events == [{"event": "fex_test_passed"}]
+
+
+def test_smoke_preserves_preexisting_running_app(appium_server, tmp_path):
+    url, state = appium_server
+    state["app"] = 4
+    client = AppiumController(url)
+    client.connect("tablet", "test.madeira")
+    report = Run(client, NativeLog(), {"udid": "tablet"}, "test.madeira", tmp_path).smoke()
+    assert report["status"] == "failed"
+    assert state["app"] == 4
+    assert not any(c[2] and c[2].get("script") == "mobile: terminateApp" for c in state["calls"])

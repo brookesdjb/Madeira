@@ -82,7 +82,8 @@ make device-smoke-test
 automation/.venv/bin/python -m automation.controller.cli smoke --frontend developer
 ```
 
-The library smoke selects Library, takes a screenshot, opens Settings, finds the
+Madeira must be stopped before smoke begins, so an active game is never killed
+by a smoke-test preflight. The library smoke selects Library, takes a screenshot, opens Settings, finds the
 existing JIT setup button without activating it, returns to Library, verifies
 its selected state, takes another screenshot, collects diagnostics and
 terminates Madeira. The developer variant opens/closes All settings. Explicit
@@ -144,3 +145,28 @@ Appium is bound to loopback without relaxed-security. The client rejects remote
 hosts and redirects. A local OS user with access to Appium has device control;
 this is a trusted development Mac, not a public service. No on-device network
 endpoint is introduced.
+
+## Offline screenshot comparison
+
+```sh
+automation/.venv/bin/python -m automation.controller.cli compare-images baseline.png candidate.png --pixel-threshold 20 --changed-fraction 0.1
+# Optionally isolate the game rectangle in image pixels, excluding OS chrome:
+# --crop LEFT TOP RIGHT BOTTOM
+```
+
+Uses a small blur plus changed-pixel fraction to tolerate antialiasing changes.
+Different resolutions are inconclusive. Suspected black/uniform captures are
+flagged for review, even against an equally blank baseline. Dark scenes and
+loading screens are not automatically rendering failures; inspect the image.
+Coordinates for crop are image pixels, unlike XCTest's UI screen points.
+
+Physical pytest wrappers are skipped by default. After successful setup:
+
+```sh
+MADEIRA_RUN_PHYSICAL=1 make automation-test
+# Separately, only with the opted-in Debug build and JIT configured:
+MADEIRA_RUN_JIT_PHYSICAL=1 make automation-test
+```
+
+These run the same CLI workflows and require a running Appium server. Ordinary
+`make automation-test` performs host-only validation and does not touch a device.

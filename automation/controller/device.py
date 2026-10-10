@@ -28,15 +28,19 @@ def run(argv, timeout=120):
 
 def doctor():
     names = ["xcodebuild", "xcrun", "python3", "node", "npm", "appium", "pymobiledevice3"]
+    local_appium = Path(__file__).resolve().parents[1] / "node_modules/.bin/appium"
     versions = {"python": platform.python_version(), "host": platform.platform()}
+    executables = {name: shutil.which(name) for name in names}
+    if local_appium.is_file():
+        executables["appium"] = str(local_appium)
     for name, args in [("xcodebuild", ["-version"]), ("node", ["--version"]), ("appium", ["--version"])]:
-        if shutil.which(name):
+        if executables[name]:
             try:
-                versions[name] = run([name, *args], 30).strip()
+                versions[name] = run([executables[name], *args], 30).strip()
             except AutomationError as exc:
                 versions[name] = str(exc)
     return {"platform": platform.system(), "versions": versions,
-            "tools": {name: bool(shutil.which(name)) for name in names},
+            "tools": {name: bool(executables[name]) for name in names},
             "physical_validation": "NOT_PERFORMED",
             "blockers": [] if platform.system() == "Darwin" and shutil.which("xcrun")
             else ["macOS_with_Xcode_required"]}

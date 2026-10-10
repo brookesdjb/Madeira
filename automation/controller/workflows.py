@@ -4,6 +4,7 @@ import json
 import os
 from pathlib import Path
 import uuid
+import subprocess
 from .device import AutomationError
 
 
@@ -22,7 +23,13 @@ class Run:
     def __init__(self, device, native, info, bundle_id, path):
         self.device, self.native, self.info = device, native, info
         self.bundle_id, self.path = bundle_id, Path(path)
-        self.report = {"schema_version": 1, "device": info, "bundle_id": bundle_id,
+        root = Path(__file__).resolve().parents[2]
+        try:
+            commit = subprocess.check_output(["git", "-C", str(root), "rev-parse", "HEAD"], text=True).strip()
+            dirty = bool(subprocess.check_output(["git", "-C", str(root), "status", "--porcelain"], text=True))
+        except (OSError, subprocess.CalledProcessError):
+            commit, dirty = None, None
+        self.report = {"source_commit": commit, "source_dirty": dirty, "schema_version": 1, "device": info, "bundle_id": bundle_id,
                        "started_at": datetime.now(timezone.utc).isoformat(), "steps": [],
                        "status": "running", "evidence": {}, "hardware_validation": "attempted"}
 
@@ -75,8 +82,12 @@ class Run:
         return self.report
 
     def smoke(self, frontend="library"):
+        launched = False
         try:
+            if self.device.app_state(self.bundle_id) not in (0, 1):
+                raise AutomationError("smoke_requires_Madeira_stopped_to_preserve_active_games")
             self.step("launch", lambda: self.device.launch_app(self.bundle_id))
+            launched = True
             self.step("verify_foreground", lambda: self.require_state(4))
             if frontend == "library":
                 self.step("initial_library", lambda: self.device.tap_id("madeira.tab.library"))
@@ -94,10 +105,10 @@ class Run:
                 self.step("verify_developer", lambda: self.device.find("madeira.settings.open"))
             self.step("returned_screenshot", lambda: self.device.screenshot(self.path / "returned.png"))
             self.report["status"] = "passed"
-        except Exception:
+        except Exception as exc:
             self.report["status"] = "failed"
-        finally:
-            return self.finish()
+            self.report["error"] = str(exc) if isinstance(exc, AutomationError) else type(exc).__name__
+        return self.finish(terminate=launched)
 
     def require_selected(self, identifier):
         element = self.device.find(identifier)
