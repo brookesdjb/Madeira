@@ -175,8 +175,13 @@ def function_at(source_lines, line):
 
 def scan(paths):
     gaps, sites, binds = {}, {}, {}
-    for path in paths:
-        run = Path(path).name
+    if len({Path(p).resolve() for p in paths}) != len(paths):
+        raise ValueError('each log file must identify a distinct run')
+    names = [Path(p).name for p in paths]
+    # Device exports commonly use the same filename in separate run folders.
+    # Prefix every name if any collide, without exposing absolute private paths.
+    labels = names if len(set(names)) == len(names) else [f'{i + 1}:{name}' for i, name in enumerate(names)]
+    for path, run in zip(paths, labels):
         last_sites = {}
         with open(path, 'r', errors='replace') as f:
             for raw in f:
@@ -200,11 +205,11 @@ def scan(paths):
                 g['runs'][run] = g['runs'].get(run, 0) + 1
         for line, n in last_sites.items():
             sites.setdefault(line, {})[run] = n
-    return gaps, sites, binds
+    return gaps, sites, binds, labels
 
 
 def build(paths, source=None):
-    gaps, sites, binds = scan(paths)
+    gaps, sites, binds, labels = scan(paths)
     src = Path(source).read_text(errors='replace').splitlines() if source else None
     rows = [{'area': area, 'impact': impact, 'gap': key, 'runs': sorted(g['runs']),
              'lines': sum(g['runs'].values()), 'example': g['example']}
@@ -215,7 +220,7 @@ def build(paths, source=None):
     site_rows.sort(key=lambda r: (-r['skips'], r['line']))
     bind_rows = [{'failure': why, 'runs': sorted(per), 'count': sum(per.values())} for why, per in binds.items()]
     bind_rows.sort(key=lambda r: (-r['count'], r['failure']))
-    return {'runs': [Path(p).name for p in paths], 'gaps': rows, 'skip_sites': site_rows, 'bind_failures': bind_rows}
+    return {'runs': labels, 'gaps': rows, 'skip_sites': site_rows, 'bind_failures': bind_rows}
 
 
 def cell(text):
@@ -261,7 +266,7 @@ def main(argv=None):
     args = ap.parse_args(argv)
     try:
         report = build(args.logs, args.source)
-    except OSError as e:
+    except (OSError, ValueError) as e:
         print('d3d12_gap_report: %s' % e, file=sys.stderr)
         return 2
     print(json.dumps(report, indent=2) if args.json else markdown(report))

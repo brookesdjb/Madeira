@@ -129,5 +129,21 @@ for raw in messages:
 check(len(messages) > 100, 'read %d log messages from madeira_d3d12.c' % len(messages))
 check(not unknown, 'every refusal/skip message has a rule' + ''.join('\n       no rule: ' + u for u in unknown))
 
+with tempfile.TemporaryDirectory() as d:
+    a, b = Path(d) / 'first' / 'game.log', Path(d) / 'second' / 'game.log'
+    a.parent.mkdir(); b.parent.mkdir()
+    a.write_text(RUN_A); b.write_text(RUN_B)
+    report = G.build([str(a), str(b)])
+    shader = next(g for g in report['gaps'] if g['gap'] == 'CheckFeatureSupport(SHADER_MODEL)')
+    check(len(shader['runs']) == 2 and len(set(report['runs'])) == 2,
+          'same-named logs in separate run folders remain distinct')
+    sites = {s['line']: s['skips'] for s in report['skip_sites']}
+    check(sites[3773] == 6, 'same-named runs do not overwrite cumulative counts')
+    try:
+        G.build([str(a), str(a)])
+        check(False, 'repeated input cannot manufacture another run')
+    except ValueError:
+        check(True, 'repeated input cannot manufacture another run')
+
 print('PASS' if not fails else 'FAILED')
 sys.exit(1 if fails else 0)
