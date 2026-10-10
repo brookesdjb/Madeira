@@ -249,6 +249,8 @@ def appium_server():
                 value = []
             elif self.command == "DELETE":
                 state["session"] = False
+                if state.get("expired"):
+                    value, status = {"error": "invalid session id"}, 404
             data = json.dumps({"value": value}).encode()
             self.send_response(status)
             self.send_header("Content-Type", "application/json")
@@ -372,3 +374,21 @@ def test_lifecycle_failure_retains_report_and_closes_session(appium_server, tmp_
     assert "PRIVATE_DIAGNOSTIC" not in (tmp_path / "report.json").read_text()
     if failure in ("mobile: launchApp", "mobile: queryAppState"):
         assert not any(c[2] and c[2].get("script") == "mobile: terminateApp" for c in state["calls"])
+
+
+def test_socket_idle_budget_and_expired_session_cleanup(appium_server):
+    url, state = appium_server
+    client = AppiumController(url)
+    client.connect("tablet", "test.madeira", idle_timeout=2100)
+    assert state["calls"][0][2]["capabilities"]["alwaysMatch"]["appium:newCommandTimeout"] == 2100
+    state["app"] = 4
+    state["expired"] = True
+    client.close()
+    assert client.session is None and state["app"] == 4
+    assert not any(c[2] and c[2].get("script") == "mobile: terminateApp" for c in state["calls"])
+
+
+@pytest.mark.parametrize("timeout", [0, -1, 3601, True, 1.5])
+def test_invalid_session_idle_budget_refused_before_connect(timeout):
+    with pytest.raises(AutomationError, match="invalid_appium_idle_timeout"):
+        AppiumController().connect("tablet", "test.madeira", idle_timeout=timeout)

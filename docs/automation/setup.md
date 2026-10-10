@@ -256,3 +256,9 @@ pairing/provisioning may still be necessary, and the existing JIT bootstrap is
 separate from this command channel. The route switch does not itself establish
 wireless device readiness. Keep the device connection/power conditions identical
 across paired performance runs, since those conditions may affect thermals.
+
+Socket-driven sessions may have no Appium commands for several minutes. The
+CLI gives them a bounded 2100-second Appium idle budget; custom persistent
+controllers should pass `idle_timeout=2100` to `connect`. This does not change
+the native replay heartbeat timeout. Expired Appium sessions are already
+closed and cleanup does not relaunch or terminate the game.
