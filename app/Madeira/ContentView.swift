@@ -2344,20 +2344,25 @@ struct ContentView: View {
         }
 
         DispatchQueue.global(qos: .userInitiated).async {
+            #if DEBUG && MADEIRA_AUTOMATION
+            let expected: Int64 = AutomationProbe.enabled ? 42 : 0
+            let result = AutomationProbe.enabled ? fex_automation_test_execute() : fex_test_execute()
+            #else
+            let expected: Int64 = 0
             let result = fex_test_execute()
+            #endif
 
             DispatchQueue.main.async {
                 #if DEBUG && MADEIRA_AUTOMATION
                 if AutomationProbe.enabled { AutomationProbe.shared.completeFEX(result) }
                 #endif
-                switch result {
-                case 42:
+                if result == expected {
                     jitStatus = .available
-                    logStore.log("FEX-Emu test PASSED: x86-64 code returned 42!", level: .success)
-                case -1:
+                    logStore.log("FEX-Emu test PASSED: x86-64 ELF exited with code \(result)", level: .success)
+                } else if result == -1 {
                     jitStatus = .unavailable
                     logStore.log("FEX-Emu test FAILED (init/setup error)", level: .error)
-                default:
+                } else {
                     jitStatus = .unavailable
                     logStore.log("FEX-Emu test returned \(result)", level: .error)
                 }

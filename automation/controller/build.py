@@ -21,15 +21,18 @@ def inspect_app(app, automation, signed):
         binaries.append(app / "Madeira.debug.dylib")
     contents = [p.read_bytes() for p in binaries]
     probe = any(b"madeira.automation.status" in b for b in contents)
+    native_fixture = any(b"fex_automation_test_execute" in b for b in contents)
     # Check actual compiled app binaries, not just source #if declarations.
     if probe != automation:
         raise AutomationError("compiled_automation_surface_mismatch")
+    if native_fixture != automation:
+        raise AutomationError("compiled_automation_native_fixture_mismatch")
     if signed:
         verified = subprocess.run(["codesign", "--verify", "--deep", "--strict", str(app)],
                                   capture_output=True)
         if verified.returncode:
             raise AutomationError("app_signature_verification_failed")
-    return {"bundle_id": info["CFBundleIdentifier"], "automation_surface": probe,
+    return {"bundle_id": info["CFBundleIdentifier"], "automation_surface": probe, "automation_native_fixture": native_fixture,
             "signature_verified": signed,
             "binary_sha256": {p.name: hashlib.sha256(b).hexdigest() for p, b in zip(binaries, contents)}}
 
@@ -60,6 +63,7 @@ def build_app(root, bundle_id, team=None, configuration="Debug", automation=Fals
         arguments.append("CODE_SIGNING_ALLOWED=NO")
     if automation:
         arguments.append("SWIFT_ACTIVE_COMPILATION_CONDITIONS=$(inherited) DEBUG MADEIRA_AUTOMATION")
+        arguments.append("OTHER_CPLUSPLUSFLAGS=$(inherited) -DMADEIRA_AUTOMATION=1")
     arguments.extend(settings)
     report = {"schema_version": 1, "configuration": configuration, "automation": automation,
               "signed": not unsigned, "hardware_validation": "NOT_PERFORMED",

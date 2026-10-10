@@ -5,7 +5,20 @@ from .device import AutomationError
 
 
 def snapshot(device):
-    device.tap_id("madeira.automation.refresh")
+    try:
+        device.tap_id("madeira.automation.refresh")
+    except AutomationError as exc:
+        if str(exc) != "no such element":
+            raise
+        # The normal setup sheet hides the probe. Identify this prerequisite
+        # without dismissing a dialog or reading potentially private error text.
+        try:
+            device.find("JIT setup", timeout=0)
+        except AutomationError as setup_error:
+            if str(setup_error) != "no such element":
+                raise
+            raise exc
+        raise AutomationError("jit_setup_required") from None
     result = json.loads(device.value("madeira.automation.status"))
     if not isinstance(result, dict) or result.get("schema_version") != 1:
         raise AutomationError("unsupported_probe_schema")
@@ -26,11 +39,26 @@ def wait_for(workflow, condition, seconds=100, clock=time.monotonic, pause=time.
             background_since = background_since or clock()
             if clock() - background_since >= 10:
                 workflow.device.activate_app(workflow.bundle_id)
+                workflow.report.setdefault("foreground_events", []).append({"action": "activate_existing_process", "observed_state": state})
                 background_since = clock()
             pause(1)
             continue
         background_since = None
-        result = snapshot(workflow.device)
+        started = time.perf_counter()
+        try:
+            result = snapshot(workflow.device)
+        except AutomationError as exc:
+            # Opening StikDebug/Shortcuts can race the foreground-state query.
+            # Keep the original process and bounded deadline during that switch.
+            if str(exc) == "no such element" and workflow.device.app_state(workflow.bundle_id) not in (0, 1, 4):
+                pause(1)
+                continue
+            raise
+        workflow.report.setdefault("ui_refresh_timings", []).append({
+            "sequence": result.get("sequence"),
+            "round_trip_ms": round((time.perf_counter() - started) * 1000, 2),
+            "debugger_attached": result.get("debugger_attached"),
+        })
         if result.get("sequence") == last_sequence:
             raise AutomationError("probe_status_not_refreshing")
         last_sequence = result.get("sequence")

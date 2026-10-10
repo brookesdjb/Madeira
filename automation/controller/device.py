@@ -173,6 +173,7 @@ def diagnostic_events(text):
     """Export only fixed events; no free text, paths, tokens, or account identifiers."""
     markers = {
         "FEX-Emu test PASSED: x86-64 code returned 42!": "fex_test_passed",
+        "FEX-Emu test PASSED: x86-64 ELF exited with code 42": "fex_test_passed",
         "FEX-Emu test FAILED": "fex_test_failed",
         "JIT enabled and debugger attached.": "jit_attached",
         "[jit-debugger] attached=1": "jit_debugger_present",

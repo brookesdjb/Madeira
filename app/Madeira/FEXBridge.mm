@@ -41,6 +41,9 @@
 
 // Embedded x86-64 ELF binary (Hello World, statically linked)
 #include "hello_x86.h"
+#if defined(SAVED_DEBUG) && defined(MADEIRA_AUTOMATION)
+#include "automation_exit42.h"
+#endif
 
 // __clear_cache is a compiler-rt builtin for icache invalidation.
 // On iOS ARM64 we provide it via sys_icache_invalidate.
@@ -515,7 +518,7 @@ void fex_shutdown(void) {
     fex_log("FEXCore shut down");
 }
 
-int64_t fex_test_execute(void) {
+static int64_t execute_test_elf(const uint8_t *elf_data, size_t elf_size, int64_t expected_exit) {
     // Guard against concurrent calls from SwiftUI rerenders
     static std::atomic<bool> running{false};
     static std::atomic<int64_t> cached_result{-999};
@@ -551,9 +554,6 @@ int64_t fex_test_execute(void) {
         uint64_t p_offset, p_vaddr, p_paddr, p_filesz, p_memsz, p_align;
     };
     constexpr uint32_t PT_LOAD = 1;
-
-    const uint8_t *elf_data = hello_x86_elf;
-    size_t elf_size = hello_x86_elf_len;
 
     auto *ehdr = reinterpret_cast<const Elf64_Ehdr*>(elf_data);
 
@@ -782,7 +782,7 @@ int64_t fex_test_execute(void) {
 
     // Read the exit code (set by SyscallHandler before longjmp)
     int64_t exit_code = g_exit_code;
-    fex_log("Execution complete. Exit code = %lld (expected 0)", exit_code);
+    fex_log("Execution complete. Exit code = %lld (expected %lld)", exit_code, expected_exit);
 
     // Also read CPU state for debugging
     int64_t rax_val = static_cast<int64_t>(Thread->CurrentFrame->State.gregs[FEXCore::X86State::REG_RAX]);
@@ -795,11 +795,11 @@ int64_t fex_test_execute(void) {
     }
     ::munmap(stack_mem, GUEST_STACK_SIZE);
 
-    if (exit_code == 0) {
-        fex_log("=== FEX ELF test PASSED: Hello World exited with code 0 ===");
-        cached_result.store(0);
+    if (exit_code == expected_exit) {
+        fex_log("=== FEX ELF test PASSED: guest exited with code %lld ===", exit_code);
+        cached_result.store(exit_code);
         running.store(false);
-        return 0;
+        return exit_code;
     }
 
     fex_log("=== FEX ELF test result: exit_code=%lld, RAX=%lld, RDI=%lld ===", exit_code, rax_val, rdi_val);
@@ -807,3 +807,13 @@ int64_t fex_test_execute(void) {
     running.store(false);
     return static_cast<int64_t>(exit_code);
 }
+
+int64_t fex_test_execute(void) {
+    return execute_test_elf(hello_x86_elf, hello_x86_elf_len, 0);
+}
+
+#if defined(SAVED_DEBUG) && defined(MADEIRA_AUTOMATION)
+int64_t fex_automation_test_execute(void) {
+    return execute_test_elf(automation_exit42_elf, sizeof(automation_exit42_elf), 42);
+}
+#endif
