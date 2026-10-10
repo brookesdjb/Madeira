@@ -1285,13 +1285,6 @@ struct ContentView: View {
                     developerBody
                 }
             }
-            #if DEBUG && MADEIRA_AUTOMATION
-            .safeAreaInset(edge: .bottom) {
-                if AutomationProbe.enabled {
-                    AutomationProbePanel(enableJIT: enableJIT, runFEX: runFEXTest, launch: { launchLibraryEntry($0) })
-                }
-            }
-            #endif
             .navigationTitle("Madeira")
             .navigationBarTitleDisplayMode(.inline)
             .toolbarBackground(.regularMaterial, for: .navigationBar)
@@ -1350,6 +1343,14 @@ struct ContentView: View {
                 DockOffline.begin()
                 FrontendChoice.logStartup()
                 DeviceLoadDiagnostics.start()
+                #if DEBUG && MADEIRA_AUTOMATION
+                if AutomationProbe.enabled {
+                    AutomationProbe.shared.enableJIT = enableJIT
+                    AutomationProbe.shared.runFEX = runFEXTest
+                    AutomationProbe.shared.launch = { launchLibraryEntry($0) }
+                    TouchControlsHost.attach()
+                }
+                #endif
                 // Madeira Dock: an unconsumed sign-in transfer from an earlier run goes.
                 if wine_process_is_running() == 0 { MadeiraDock.cleanup() }
             }
@@ -3943,6 +3944,13 @@ final class TouchControlsModel: ObservableObject {
 /// the game underneath — mouse-look must keep working between the buttons.
 final class ControlsWindow: UIWindow {
     override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
+        #if DEBUG && MADEIRA_AUTOMATION
+        // The command panel lives above the raw Metal window, including during
+        // startup. Only its measured rectangle takes touches from the game.
+        if AutomationProbe.enabled, AutomationProbe.panelRect.contains(point) {
+            return super.hitTest(point, with: event)
+        }
+        #endif
         let m = TouchControlsModel.shared
         // Edit mode owns the whole screen: drags and the scale pinch must not
         // leak through and swing the camera while you are arranging buttons.
@@ -4024,6 +4032,23 @@ struct TouchControlsOverlay: View {
                         MappingPanel(control: m.controls[i], screen: geo.size)
                     }
                 }
+                #if DEBUG && MADEIRA_AUTOMATION
+                if AutomationProbe.enabled {
+                    AutomationProbePanel(
+                        enableJIT: { AutomationProbe.shared.enableJIT() },
+                        runFEX: { AutomationProbe.shared.runFEX() },
+                        launch: { AutomationProbe.shared.launch($0) })
+                        .background(GeometryReader { panel in
+                            Color.clear
+                                .onAppear { AutomationProbe.panelRect = panel.frame(in: .global) }
+                                .onChange(of: panel.frame(in: .global)) { _, rect in
+                                    AutomationProbe.panelRect = rect
+                                }
+                        })
+                        .onDisappear { AutomationProbe.panelRect = .zero }
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+                }
+                #endif
             }
             .frame(width: geo.size.width, height: geo.size.height, alignment: .top)
             .contentShape(Rectangle())
@@ -4683,6 +4708,11 @@ struct MappingPanel: View {
 @MainActor final class AutomationProbe: ObservableObject {
     static let enabled = ProcessInfo.processInfo.arguments.contains("--madeira-automation")
     static let shared = AutomationProbe()
+    static var panelRect = CGRect.zero
+    // The normal ContentView actions are registered before the overlay attaches.
+    var enableJIT: () -> Void = {}
+    var runFEX: () -> Void = {}
+    var launch: (LibraryEntry) -> Void = { _ in }
     @Published private(set) var snapshot = "{}"
     @Published private(set) var commandReply = "{}"
     private var requests = AutomationRequestLedger()

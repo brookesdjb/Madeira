@@ -29,8 +29,32 @@ def test_invalid_command_does_not_touch_UI(kwargs):
 def test_wrong_correlation_is_never_accepted():
     class Wrong(Device):
         def value(self, name): return '{"schema_version":2,"request_id":"old","status":"accepted"}'
-    with pytest.raises(AutomationError, match="reply_mismatch"):
-        command(Wrong(), "launch_game", steam_app_id=400)
+    with pytest.raises(AutomationError, match="request_may_have_run"):
+        command(Wrong(), "launch_game", steam_app_id=400, reply_timeout=0)
+
+
+def test_launch_transition_retries_read_without_resending(monkeypatch):
+    class Transition(Device):
+        reads = 0
+        def value(self, name):
+            self.reads += 1
+            if self.reads == 1: raise AutomationError("no such element")
+            if self.reads == 2: return '{"schema_version":2,"request_id":"old","status":"accepted"}'
+            return super().value(name)
+    monkeypatch.setattr("automation.controller.game_control.time.sleep", lambda _: None)
+    d = Transition()
+    assert command(d, "launch_game", steam_app_id=400)["status"] == "completed"
+    assert d.reads == 3
+    assert d.effects.count("madeira.automation.send-command") == 1
+
+
+def test_lost_reply_preserves_uncertain_mutation():
+    class Missing(Device):
+        def value(self, name): raise AutomationError("no such element")
+    d = Missing()
+    with pytest.raises(AutomationError, match="request_may_have_run"):
+        command(d, "stop_game", steam_app_id=400, reply_timeout=0)
+    assert d.effects.count("madeira.automation.send-command") == 1
 
 
 def test_accepted_request_is_distinct_from_exit():

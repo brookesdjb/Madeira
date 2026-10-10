@@ -63,6 +63,13 @@ remain schema 1 with added `game_status`; command requests/replies are schema 2.
 No network listener, launch path, credentials or arbitrary launch arguments are
 accepted. Appium's existing paired XCTest session remains the transport.
 
+The opted-in panel is hosted in the existing controls window above the raw
+Metal surface. Its measured rectangle owns its touches even during startup;
+the remaining game surface keeps the normal input routing. Normal builds omit
+this overlay and its hit-test branch. The host waits up to 15 seconds for the
+matching reply across screen transitions. It never resends a request after
+Send; an unavailable reply reports that the request may already have run.
+
 ```json
 {"schema_version":2,"request_id":"launch-001","operation":"launch_game","steam_app_id":400}
 ```

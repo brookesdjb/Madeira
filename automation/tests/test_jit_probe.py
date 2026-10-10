@@ -148,7 +148,7 @@ def test_probe_source_is_double_compile_gated_and_runtime_opt_in():
     path = Path(__file__).resolve().parents[2] / "app/Madeira/ContentView.swift"
     source = path.read_text()
     marker = "#if DEBUG && MADEIRA_AUTOMATION"
-    assert source.count(marker) == 4
+    assert source.count(marker) == 6
     declaration = source[source.rindex(marker):]
     assert 'arguments.contains("--madeira-automation")' in declaration
     assert declaration.rstrip().endswith("#endif")

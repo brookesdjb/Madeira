@@ -9,7 +9,7 @@ OPERATIONS = {"get_status", "list_installed_games", "launch_game", "stop_game",
               "get_game_status", "get_runtime_status", "get_jit_status", "get_diagnostics"}
 
 
-def command(device, operation, *, library_id=None, steam_app_id=None, request_id=None):
+def command(device, operation, *, library_id=None, steam_app_id=None, request_id=None, reply_timeout=15):
     request_id = request_id or uuid.uuid4().hex
     if operation not in OPERATIONS or not re.fullmatch(r"[A-Za-z0-9_-]{1,64}", request_id):
         raise AutomationError("invalid_game_command")
@@ -28,12 +28,24 @@ def command(device, operation, *, library_id=None, steam_app_id=None, request_id
     device.call("POST", f"/element/{element}/clear", {})
     device.text("madeira.automation.command", json.dumps(request, separators=(",", ":")))
     device.tap_id("madeira.automation.send-command")
-    reply = json.loads(device.value("madeira.automation.reply"))
-    if not isinstance(reply, dict) or reply.get("schema_version") != 2 or reply.get("request_id") != request_id:
-        raise AutomationError("game_command_reply_mismatch")
-    if reply.get("status") not in {"accepted", "completed", "rejected"}:
-        raise AutomationError("invalid_game_command_reply")
-    return reply
+    # Launch replaces the library view and may briefly invalidate XCTest's
+    # elements. Poll only the correlated reply: never resend a mutation.
+    deadline = time.monotonic() + reply_timeout
+    while True:
+        try:
+            reply = json.loads(device.value("madeira.automation.reply"))
+            if isinstance(reply, dict) and reply.get("schema_version") == 2 and reply.get("request_id") == request_id:
+                if reply.get("status") not in {"accepted", "completed", "rejected"}:
+                    raise AutomationError("invalid_game_command_reply")
+                return reply
+        except AutomationError as exc:
+            if str(exc) != "no such element":
+                raise
+        except (ValueError, TypeError):
+            raise AutomationError("invalid_game_command_reply") from None
+        if time.monotonic() >= deadline:
+            raise AutomationError("game_command_reply_timeout_request_may_have_run")
+        time.sleep(0.2)
 
 
 def wait_for_exit(device, *, seconds=120, clock=time.monotonic, pause=time.sleep):
