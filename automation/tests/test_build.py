@@ -13,7 +13,7 @@ def app_fixture(tmp_path, probe=False):
     app.mkdir()
     (app / "Info.plist").write_bytes(plistlib.dumps({"CFBundleExecutable": "Madeira", "CFBundleIdentifier": "test.madeira"}))
     (app / "Madeira").write_bytes(b"main stub")
-    (app / "Madeira.debug.dylib").write_bytes(b"madeira.automation.status fex_automation_test_execute madeira.automation.command winios_automation_set_presentation_window" if probe else b"ordinary binary")
+    (app / "Madeira.debug.dylib").write_bytes(b"madeira.automation.status fex_automation_test_execute madeira.automation.command winios_automation_set_presentation_window madeira.automation.frame-capture" if probe else b"ordinary binary")
     return app
 
 

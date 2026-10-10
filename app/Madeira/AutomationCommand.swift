@@ -7,6 +7,7 @@ struct AutomationCommand: Decodable {
         case status = "get_status", games = "list_installed_games"
         case launch = "launch_game", stop = "stop_game"
         case game = "get_game_status", runtime = "get_runtime_status"
+        case captureStart = "start_frame_capture", captureStop = "stop_frame_capture"
         case jit = "get_jit_status", diagnostics = "get_diagnostics"
     }
     let schema_version: Int
