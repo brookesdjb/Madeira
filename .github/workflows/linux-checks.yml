@@ -32,6 +32,9 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: '3.14'
+      # check-steam-library.py links the Steam LZMA shim against liblzma.
+      - name: Install liblzma
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq liblzma-dev
       - name: Tool versions
         run: |
           python3 --version

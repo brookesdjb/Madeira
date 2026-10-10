@@ -18,6 +18,8 @@ ROOT = Path(__file__).resolve().parents[2]
 NEEDS = {
     'check-wma-decoder.py': 'a configured Wine build tree (MADEIRA_WINE_BUILD)',
     'check-wine-mono.py': 'xcrun (macOS)',
+    'check-steam-cloud.py': 'CryptoKit (Apple platforms only)',
+    'check-jit-network.py': 'the Darwin module (Apple platforms only)',
 }
 
 
