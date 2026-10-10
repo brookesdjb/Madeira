@@ -1,6 +1,6 @@
 # JIT / WebDriverAgent compatibility
 
-**Result: UNKNOWN — physical smoke is still gated by WDA initialization.**
+**Result: UNKNOWN — physical UI smoke passes; JIT experiment is next.**
 The Mac build and binary compile guards now pass; see mac-validation.md. Mock
 tests below exercise orchestration only. WDA/JIT coexistence remains unverified.
 

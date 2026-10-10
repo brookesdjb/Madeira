@@ -4,8 +4,8 @@
 
 The controller's HTTP protocol and failure handling are tested with a fake
 Appium server. Mac compilation/signing and binary guard checks are now verified;
-see [Mac validation](mac-validation.md). Physical smoke and JIT coexistence
-remain unverified. Run the following on your Mac. First provisioning,
+see [Mac validation](mac-validation.md). Physical UI smoke now passes on the provisioned M5 iPad; JIT coexistence
+remains unverified. Run the following on your Mac. First provisioning,
 onboarding and any OS trust prompts require a person. The controller does not
 accept those prompts, change accounts, erase data or install certificates.
 
@@ -127,9 +127,12 @@ Madeira must be stopped before smoke begins, so an active game is never killed
 by a smoke-test preflight. The library smoke selects Library, takes a screenshot, opens Settings, finds the
 existing JIT setup button without activating it, returns to Library, verifies
 its selected state, takes another screenshot, collects diagnostics and
-terminates Madeira. The developer variant opens/closes All settings. Explicit
+terminates Madeira. The developer variant opens/closes All settings in portrait
+and restores the prior orientation. Both use a process-only frontend override,
+without rewriting the persistent interface choice. Explicit
 accessibility identifiers have been added to these existing controls; their
-propagation through SwiftUI's iPad tab bar still needs physical verification.
+propagation through SwiftUI's iPad tab bar is now physically verified. Hidden
+controls behind a sheet do not satisfy the controller's visibility check.
 Do not substitute guessed coordinates and call that a validated identifier test.
 
 Reports are timestamped under automation/runs with owner-only permissions and

@@ -103,16 +103,51 @@ The installed XCUITest/Xcode/device versions fall within Appium's published
 This does not rule out a device or toolchain fault. No dependency downgrade,
 security bypass, device restart or existing-app termination was performed.
 
-Host validation: 47 tests passed, 2 physical pytest wrappers skipped. Additional
-HTTP fixture cases exercise failed launch, a launch that leaves the app stopped,
-lost session, failed termination and missing-device selection. They confirm bounded
-failure reports, session cleanup and private-error filtering; they are host
-coverage, not physical failure-injection evidence. Both actual physical CLI
-attempts above failed independently of the host pass count.
-Next: resolve the XCTest initialization gate, repeat smoke, verify identifiers
-and data protection, then continue to JIT coexistence. Onboarding/trust prompts
-remain manual.
+## Successful physical smoke and preservation checks
 
-Keep #9 open until physical smoke, active-game/data preservation and failure
-acceptance are evidenced. #10 JIT coexistence and subsequent lifecycle/input/
-benchmark acceptance remain unverified.
+After the owner approved the additional on-device XCTest prompt, WDA connected
+and Madeira launched successfully. The first UI run stopped at optional
+first-run onboarding and retained a screenshot before terminating the target.
+The separate test app's existing “Skip setup” control was used once, without
+Steam sign-in or downloads. Initial trust/provisioning is separate from the
+subsequent unattended proof.
+
+At clean harness commit `2c79231`, the acceptance run
+`automation/runs/20261010T063419.960664Z-ab9d60a0/acceptance.json` passed:
+
+- A harness-owned Documents file survived signed reinstall with identical SHA-256.
+- Install and smoke refused a preexisting running target. Its foreground state
+  remained 4 after refusal; only the test's own launched process was then stopped.
+- Library → Settings → Library passed twice using visible stable identifiers,
+  selected-tab state, PNG screenshots, termination-state verification and cleanup.
+- Developer → All settings → developer passed using visible stable identifiers,
+  PNG screenshots, termination and cleanup. Landscape is the existing game surface;
+  the harness uses portrait for the diagnostic tools and restores the prior orientation.
+- The fixture remained byte-identical after all three smoke runs.
+
+Individual successful reports under that acceptance directory:
+`20261010T063442.385956Z-e0c1406f`, `20261010T063449.995397Z-9b5dc792`, and
+`20261010T063459.393151Z-87988de1`. The installed bundle was the verified separate
+automation Debug build; its executable SHA-256 is
+`2b3ec8fc2ccd2589f854900d300877ba784192e69dbaf492bc0ba94ef7c04ec6`
+and Debug dylib SHA-256 is
+`305d9e3a59a1a51cb6164970a28003350b7f786d101ba653afae10271f1178c9`.
+No Swift/native code changed during these host-controller fixes. Screenshots
+and device identifiers remain private. The normal SSD installation was not replaced.
+
+XCTest can return controls behind a full-screen onboarding sheet. The controller
+now requires displayed elements rather than treating hidden-control existence as
+page readiness. Smoke selects the requested frontend using Foundation's process
+argument domain (`-madeiraFrontend new/old`), preserving the persistent preference.
+
+Host validation: 49 tests passed, 2 physical pytest wrappers skipped. Direct
+physical CLI/acceptance runs above passed independently of the pytest wrappers.
+HTTP fixtures additionally cover missing device, failed launch, stopped-after-launch,
+lost session, failed termination, hidden controls and private-error filtering.
+Actual startup/onboarding failures confirmed bounded reporting and target cleanup;
+forced physical disconnect and termination-failure injection remain untested.
+A running test app and owned fixture are the preservation evidence; this does
+not claim a live game's saves or normal game/cloud-save behavior were exercised.
+
+The physical UI smoke gate for #10 is now met. JIT coexistence, x86 execution,
+detach survival and game automation remain separate, unverified milestones.

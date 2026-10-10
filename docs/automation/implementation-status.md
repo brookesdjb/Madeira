@@ -8,8 +8,8 @@ See [Mac validation](mac-validation.md) for current verified results and gates.
 | Milestone | Implemented | Tests / actual results | Remaining / limitations | Physical validation |
 |---|---|---|---|---|
 | 0 investigation | Source map, build/signing/runtime/JIT/input/log inspection | Mac toolchain and existing component inputs inventoried; M5 iPad/iPadOS 26.7 discovered read-only over Wi-Fi | USB/unlock and dedicated test-app provisioning required | READ-ONLY INVENTORY |
-| 1 controller | devicectl discovery/.app install; W3C Appium UI/lifecycle/screenshots; JSON CLI; safe diagnostics; shared reservation; running-target install protection; private build/startup reports | Normal Debug, automation Debug, Release and WDA compile/sign on Mac; 47 host tests pass, 2 physical wrappers skipped; separate app installed via wired USB | Two physical sessions failed: XCTest automation-mode timeout persists after owner enabled UI Automation; runner authorized, device reports no passcode required; checking additional on-device prompt; identifiers/data preservation still unverified; IPA install omitted | WDA INITIALIZATION BLOCKED |
-| 2 JIT coexistence | Investigation, opt-in XCTest status pane, bounded compatibility experiment | Mock tests cover success, failed x86 result, timeout, termination and fresh-process reactivation; no physical experiment performed | Must demonstrate JIT + responsive WDA + x86 execution; no claim of compatibility | BLOCKED |
+| 1 controller | devicectl discovery/.app install; W3C Appium UI/lifecycle/screenshots; JSON CLI; safe diagnostics; shared reservation; running-target install protection; private build/startup reports | Normal Debug, automation Debug, Release and WDA compile/sign on Mac; 49 host tests pass, 2 physical wrappers skipped; separate app installed via wired USB | Three physical UI runs pass across library/developer routes after initial XCTest prompt approval; running-target refusal and owned fixture persistence verified; forced disconnect/live-game saves untested; IPA install omitted | UI SMOKE PASSED |
+| 2 JIT coexistence | Investigation, opt-in XCTest status pane, bounded compatibility experiment | Mock tests cover success, failed x86 result, timeout, termination and fresh-process reactivation; physical smoke prerequisite now passes | Must demonstrate JIT + responsive WDA + x86 execution; no claim of compatibility | BLOCKED |
 | 3 internal API | Minimal debug-only status/JIT/FEX probe via XCTest | Swift compiled; actual app binary contains probe only in opted-in Debug and excludes it in normal Debug/Release | Full game lifecycle API deferred until smoke/JIT gate; runtime opt-in and behavior unverified on iPad | NOT TESTED |
 | 4 game input | Existing integration points mapped | None | Virtual source, bounded release, recorder/replay; no direct bridge writes added | NOT TESTED |
 | 5 visual checks | External screenshots, run association, crop/threshold comparison and suspected blank detection | Mock capture and 5 synthetic-image tests pass | Actual Metal screenshot fidelity and per-game threshold calibration | NOT TESTED |
@@ -17,9 +17,9 @@ See [Mac validation](mac-validation.md) for current verified results and gates.
 | 7 benchmarks | Deferred | None | Requires trustworthy launch readiness/input/measurements; do not benchmark sleeps or fake FPS | NOT TESTED |
 | 8 agent integration | make setup/check/build/install/smoke/jit, JSON actions, exit codes | Host smoke workflow tested | JIT/game/benchmark milestones still gated; no infinite retries | BLOCKED |
 
-Physical milestone 1 is NOT complete just because host-side code is committed.
-First developer action: use setup.md on the USB-connected provisioned Mac and
-run device-smoke-test. Retain its report before proceeding to JIT experiments.
+Physical UI smoke now passes on the provisioned USB iPad; source, binary and
+private run references are in mac-validation.md. Proceed to JIT experiments.
+Forced physical failure injection and live-game save/cloud checks remain untested.
 
 Appium 3.8.0 and XCUITest 12.16.0 installed from npm lockfile on Linux;
 `appium driver list --installed` successfully recognizes xcuitest. A real loopback Appium server starts and its
