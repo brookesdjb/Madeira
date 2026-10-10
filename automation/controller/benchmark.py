@@ -6,6 +6,7 @@ from .game_control import command
 from .jit_probe import snapshot
 from .replay import validate_plan
 from .telemetry import load_trace, summarize
+from .capture_metadata import load_metadata
 from .workflows import save_json
 
 
@@ -49,10 +50,16 @@ def capture(workflow, plan, warmup=60, seconds=180, *, clock=time.monotonic, pau
             '--source','Documents/automation-submission-trace.json','--destination',str(destination)], 120)
         destination.chmod(0o600)
         trace=load_trace(destination); metrics=summarize(trace)
+        metadata_path=workflow.path/'capture-metadata.json'
+        workflow.native.command(['device','copy','from','--device',workflow.info['udid'],
+            '--domain-type','appDataContainer','--domain-identifier',workflow.bundle_id,
+            '--source','Documents/automation-capture-metadata.json','--destination',str(metadata_path)],120)
+        metadata_path.chmod(0o600)
+        metadata=load_metadata(metadata_path,metrics['capture_id'])
         result={'schema_version':1, 'scope':'present_submission', 'warmup_seconds':warmup,
                 'requested_measure_seconds':seconds, 'replay':replay, 'observations':observations,
                 'metrics':metrics, 'scene_readiness':'NOT_ESTABLISHED_BY_CAPTURE',
-                'cpu_gpu_attribution':'NOT_AVAILABLE', 'status':'captured'}
+                'process_capture':metadata, 'cpu_gpu_attribution':'PER_ROLE_AND_GPU_NOT_AVAILABLE', 'status':'captured'}
         save_json(workflow.path/'benchmark-capture.json',result)
         return result
     except Exception:
