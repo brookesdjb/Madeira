@@ -1,1 +1,3 @@
 app/Frameworks/StikJIT.xcframework/** -whitespace
+# Unified patch context lines intentionally include whitespace-only lines.
+build/dxmt-ios/experiments/*.patch -whitespace

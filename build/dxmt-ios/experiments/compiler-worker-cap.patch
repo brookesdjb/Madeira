@@ -1,0 +1,23 @@
+--- a/src/dxmt/dxmt_tasks.hpp
++++ b/src/dxmt/dxmt_tasks.hpp
+@@ -2,6 +2,8 @@
+ 
+ #include "thread.hpp"
+ #include "util_win32_compat.h"
++#include "util_env.hpp"
++#include <algorithm>
+ #include <atomic>
+ #include <queue>
+ #include <unordered_map>
+@@ -47,6 +49,11 @@
+ 
+ template <typename Task> task_scheduler<Task>::task_scheduler() {
+   max_threads = dxmt::thread::hardware_concurrency() * 2;
++  // Madeira experiment: bounded opt-in cap, unchanged policy when unset/invalid.
++  // Keep at least the two initial workers even if CPU detection returns zero.
++  const std::string cap = env::getEnvVar("DXMT_COMPILER_THREADS");
++  if (cap == "2" || cap == "4")
++    max_threads = std::min<uint64_t>(cap == "2" ? 2 : 4, std::max<uint64_t>(2, max_threads));
+   workers_.reserve(max_threads);
+   threads = 2;
+ 
