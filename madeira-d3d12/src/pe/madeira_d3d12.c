@@ -4806,7 +4806,9 @@ static void mad_exec_list(struct mad_queue *q, struct mad_list *l, obj_handle_t 
                 /* Records that change state between draws are read here, at
                  * replay, which is only correct when no GPU work can still be
                  * writing them: an UPLOAD heap is GPU read-only. */
-                if (!mad_ei_cpu_readable(c->u.ind.args, c->u.ind.off, (UINT64)c->u.ind.count * c->u.ind.stride)) {
+                UINT last = c->kind == MC_DRAW_INDIRECT ? 16 : c->kind == MC_DRAW_INDEXED_INDIRECT ? 20 : 12;
+                if (!count) break;
+                if (!mad_ei_cpu_readable(c->u.ind.args, c->u.ind.off, (UINT64)(count - 1) * c->u.ind.stride + c->u.ind.draw_off + last)) {
                     static unsigned said;
                     if (said++ < 4) d3d12_log("[madeira-d3d12] ExecuteIndirect: multi-argument records in a GPU-writable heap (type %u) need GPU expansion; skipped\n",
                                               (unsigned)c->u.ind.args->heap);
