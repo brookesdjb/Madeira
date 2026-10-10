@@ -139,3 +139,16 @@ Next: install and physically verify the paired command transport when the owner
 has finished installing the game; verify watchdog/input-release behavior and
 capture through that transport; obtain repeated paired baselines; then test X1, W1,
 G1 and eligible F2 settings independently. G2 patches remain unapplied.
+
+
+## Fork review cleanup
+
+Host tooling PRs #28 (offline visual evidence), #36 (Linux CI), and #38 (D3D12
+log reporting) are merged into this branch with topic history preserved. Review
+fixed existing-manifest overwrite, mismatched-policy visual acceptance,
+same-named log aggregation, and missing CI dependencies/platform exclusions.
+The combined Mac automation suite passes 170 tests; two device wrappers skip.
+Runtime defaults, installed builds and baseline results are unchanged. CI also
+exposed stale host fixtures and a generated settings catalogue; those were
+reconciled with the combined source and pinned submodules.
+See [the review ledger](pr-review-2026-10-10.md) for held PRs and branch policy.

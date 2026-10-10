@@ -67,12 +67,27 @@
       "name": "transport-39",
       "ref": "automation/paired-command-transport",
       "commit": "ca05873f9f79018374f89df4510032ffe3056b80"
+    },
+    {
+      "name": "ci-36",
+      "ref": "ci/linux-checks",
+      "commit": "d92b82aaafaf4ae38dcbd31ce997ea0f2e5849fd"
+    },
+    {
+      "name": "visual-28",
+      "ref": "cloud/a5-offline-visual-evidence",
+      "commit": "84bf7a115e27a86b67c2474181264ecbae644143"
+    },
+    {
+      "name": "gap-report-38",
+      "ref": "tools/d3d12-gap-report",
+      "commit": "a031bc8e06799902a579a96ad88997eea09cf683"
     }
   ],
   "control_branch": "integration/ipad-control",
   "control_commit": "5cf22968d75a2081adf9b6d8c2c6e7d25f023c7f",
   "validation": {
-    "harness_host": "152 passed, 2 device wrappers skipped",
+    "harness_host": "170 passed, 2 device wrappers skipped",
     "swift_ios": "66 production sources, normal Debug and opted-in automation type-check passed",
     "native_ios": "changed ntdll and wineserver sources compile as arm64 objects",
     "affected_host_checks": [
@@ -96,7 +111,8 @@
       "signed_builds": "AUTOMATION_DEBUG_NORMAL_DEBUG_RELEASE_PASSED",
       "physical": "NOT_INSTALLED_OR_TESTED",
       "wifi": "SUPPORTED_ROUTE_NOT_PHYSICALLY_VERIFIED"
-    }
+    },
+    "linux_ci": "FIRST_COMBINED_RUN_EXPOSED_HOST_FIXTURES_CORRECTED_RERUN_PENDING"
   },
   "experimental_patches_applied": false,
   "control_status": "OLDER_SOURCE_NOT_MATCHED_TO_NEW_CAPTURE_REPLAY"
