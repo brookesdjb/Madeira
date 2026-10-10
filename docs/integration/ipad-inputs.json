@@ -82,12 +82,17 @@
       "name": "gap-report-38",
       "ref": "tools/d3d12-gap-report",
       "commit": "a031bc8e06799902a579a96ad88997eea09cf683"
+    },
+    {
+      "name": "comparison-29",
+      "ref": "cloud/a7-benchmark-compare",
+      "commit": "7ca5aa5b6b1bb3c07769c865fec38227532516f4"
     }
   ],
   "control_branch": "integration/ipad-control",
   "control_commit": "5cf22968d75a2081adf9b6d8c2c6e7d25f023c7f",
   "validation": {
-    "harness_host": "170 passed, 2 device wrappers skipped",
+    "harness_host": "202 passed, 2 device wrappers skipped",
     "swift_ios": "66 production sources, normal Debug and opted-in automation type-check passed",
     "native_ios": "changed ntdll and wineserver sources compile as arm64 objects",
     "affected_host_checks": [
@@ -114,10 +119,25 @@
     },
     "linux_ci": {
       "status": "ALL_THREE_JOBS_PASSED",
-      "commit": "581ffb55cdbfb7b37c97670d9e1b048bcd2e0272",
-      "run": "https://github.com/brookesdjb/Madeira/actions/runs/38048086339"
+      "commit": "de50d43746e7001ade8c43f1d3cf2bb2e84c80d3",
+      "run": "https://github.com/brookesdjb/Madeira/actions/runs/38048732404"
     }
   },
   "experimental_patches_applied": false,
-  "control_status": "OLDER_SOURCE_NOT_MATCHED_TO_NEW_CAPTURE_REPLAY"
+  "control_status": "OLDER_SOURCE_NOT_MATCHED_TO_NEW_CAPTURE_REPLAY",
+  "fork_pr_cleanup": {
+    "closed_already_integrated": [
+      16,
+      17,
+      18,
+      19,
+      25,
+      26,
+      27,
+      29
+    ],
+    "integration_commit": "de50d43746e7001ade8c43f1d3cf2bb2e84c80d3",
+    "tracking_issues_closed": false,
+    "upstream_visual_topic": "upstream/offline-visual-evidence"
+  }
 }
