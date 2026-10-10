@@ -1,0 +1,136 @@
+"""Run as python -m automation.controller.cli from the repository root."""
+import argparse
+import json
+import os
+from pathlib import Path
+import sys
+from .appium_controller import AppiumController
+from .device import AutomationError, DeviceControl, doctor, run
+from .workflows import Run, new_run, save_json
+
+DEFAULT_BUNDLE = "com.willfaust.madeora"
+ROOT = Path(__file__).resolve().parents[2]
+
+
+def parser():
+    p = argparse.ArgumentParser(description=__doc__)
+    p.add_argument("--udid", default=os.getenv("MADEIRA_DEVICE_UDID"))
+    p.add_argument("--bundle-id", default=os.getenv("MADEIRA_BUNDLE_ID", DEFAULT_BUNDLE))
+    p.add_argument("--team", default=os.getenv("MADEIRA_TEAM_ID"))
+    p.add_argument("--wda-bundle", default=os.getenv("MADEIRA_WDA_BUNDLE_ID"))
+    p.add_argument("--server", default="http://127.0.0.1:4723")
+    p.add_argument("--output", default=str(ROOT / "automation/runs"))
+    sub = p.add_subparsers(dest="command", required=True)
+    sub.add_parser("doctor")
+    sub.add_parser("devices")
+    sub.add_parser("device-check")
+    build = sub.add_parser("build")
+    build.add_argument("--automation", action="store_true")
+    install = sub.add_parser("install")
+    install.add_argument("app", help="Signed .app directory; no uninstall or data reset")
+    smoke = sub.add_parser("smoke")
+    smoke.add_argument("--frontend", choices=["library", "developer"], default="library")
+    actions = sub.add_parser("actions")
+    actions.add_argument("file", help="JSON array of UI actions; one persistent Appium session")
+    sub.add_parser("jit-test")
+    return p
+
+
+def execute_actions(workflow, actions):
+    if not isinstance(actions, list) or not 1 <= len(actions) <= 100:
+        raise AutomationError("actions_must_be_array_of_1_to_100_items")
+    allowed = {"launch", "terminate", "state", "screenshot", "inspect", "tap", "tap_id", "swipe", "scroll", "text"}
+    # Validate the whole list before any side effect.
+    if any(not isinstance(a, dict) or a.get("action") not in allowed for a in actions):
+        raise AutomationError("unknown_action")
+    device, bundle = workflow.device, workflow.bundle_id
+    for i, item in enumerate(actions):
+        name = item["action"]
+        def action():
+            if name == "launch": return device.launch_app(bundle)
+            if name == "terminate": return device.terminate_app(bundle)
+            if name == "state": return device.app_state(bundle)
+            if name == "screenshot": return device.screenshot(workflow.path / f"action-{i:03}.png")
+            if name == "inspect": return device.inspect_ui()
+            if name == "tap": return device.tap(item["x"], item["y"])
+            if name == "tap_id": return device.tap_id(item["id"])
+            if name == "swipe": return device.swipe(item["start"], item["end"], item.get("duration", 0.5))
+            if name == "scroll": return device.scroll(item["direction"])
+            if name == "text": return device.text(item["id"], item["text"])
+        result = workflow.step(f"action_{i}_{name}", action)
+        if name in ("inspect", "state", "screenshot"):
+            save_json(workflow.path / f"action-{i:03}.json", result)
+
+
+def main(argv=None):
+    args = parser().parse_args(argv)
+    os.umask(0o077)
+    try:
+        if args.command == "doctor":
+            result = doctor()
+            print(json.dumps(result))
+            return 2 if result["blockers"] else 0
+        native = DeviceControl()
+        if args.command == "devices":
+            print(json.dumps({"devices": native.devices()}))
+            return 0
+        if args.command == "build":
+            if not args.team:
+                raise AutomationError("build_requires_--team")
+            arguments = ["xcodebuild", "-project", str(ROOT / "app/Madeira.xcodeproj"),
+                         "-scheme", "Madeira", "-configuration", "Debug",
+                         "-destination", "generic/platform=iOS", "-derivedDataPath",
+                         str(ROOT / "automation/derived-data"), f"DEVELOPMENT_TEAM={args.team}",
+                         f"MADEIRA_BUNDLE_IDENTIFIER={args.bundle_id}"]
+            if args.automation:
+                arguments.append("SWIFT_ACTIVE_COMPILATION_CONDITIONS=$(inherited) DEBUG MADEIRA_AUTOMATION")
+            # Signing must already be provisioned; do not change developer accounts.
+            run([*arguments, "build"], 1800)
+            print(json.dumps({"status": "built", "app": str(ROOT / "automation/derived-data/Build/Products/Debug-iphoneos/Madeira.app")}))
+            return 0
+        info = native.select(args.udid)
+        if args.command == "device-check":
+            print(json.dumps({"status": "connected", "device": info}))
+            return 0
+        if args.command == "install":
+            print(json.dumps(native.install_app(info["udid"], args.app, args.bundle_id)))
+            return 0
+        path = new_run(args.output)
+        device = AppiumController(args.server)
+        workflow = Run(device, native, info, args.bundle_id, path)
+        try:
+            workflow.step("connect", lambda: device.connect(info["udid"], args.bundle_id, args.team, args.wda_bundle))
+            if args.command == "smoke":
+                result = workflow.smoke(args.frontend)
+            elif args.command == "jit-test":
+                from .jit_probe import probe
+                result = probe(workflow)
+            else:
+                try:
+                    execute_actions(workflow, json.loads(Path(args.file).read_text()))
+                    workflow.report["status"] = "passed"
+                except Exception:
+                    workflow.report["status"] = "failed"
+                    raise
+                finally:
+                    result = workflow.finish(terminate=False)
+        except Exception as exc:
+            workflow.report["status"] = "failed"
+            workflow.report["error"] = str(exc) if isinstance(exc, AutomationError) else type(exc).__name__
+            # A session may not exist, so don't try a second install or guessed device.
+            if device.session:
+                result = workflow.finish(terminate=False)
+            else:
+                result = workflow.report
+                save_json(path / "report.json", result)
+        print(json.dumps({"status": result["status"], "report": str(path / "report.json"),
+                          "steps": result["steps"]}))
+        return 0 if result["status"] == "passed" else 1
+    except (AutomationError, OSError, ValueError) as exc:
+        error = str(exc) if isinstance(exc, AutomationError) else type(exc).__name__
+        print(json.dumps({"status": "blocked", "error": error}))
+        return 2
+
+
+if __name__ == "__main__":
+    sys.exit(main())

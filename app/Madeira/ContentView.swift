@@ -1671,6 +1671,7 @@ struct ContentView: View {
                         .buttonStyle(.bordered)
                 }
                 Button("All settings") { devSheet = .allSettings }
+                    .accessibilityIdentifier("madeira.settings.open")
                     .buttonStyle(.bordered)
                 Button("Enable JIT") {
                     enableJIT()

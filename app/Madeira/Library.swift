@@ -2451,10 +2451,10 @@ struct LibraryView: View {
         TabView(selection: Binding(get: { tab }, set: { switchTab(to: $0) })) {
             library
                 .background(Color(uiColor: .systemGroupedBackground).ignoresSafeArea())
-                .tabItem { Image(systemName: "square.grid.2x2.fill").accessibilityLabel("Library") }
+                .tabItem { Image(systemName: "square.grid.2x2.fill").accessibilityLabel("Library").accessibilityIdentifier("madeira.tab.library") }
                 .tag(0)
             settings
-                .tabItem { Image(systemName: "gearshape.fill").accessibilityLabel("Settings") }
+                .tabItem { Image(systemName: "gearshape.fill").accessibilityLabel("Settings").accessibilityIdentifier("madeira.tab.settings") }
                 .tag(1)
         }
         // The system search field (Liquid Glass on iOS 26) in the title's place, left
