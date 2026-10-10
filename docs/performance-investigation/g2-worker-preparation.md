@@ -32,6 +32,12 @@ dependency resumes, handles already-completed dependencies, and joins idle
 workers during shutdown. It does not run real shader compilation or Wine thread
 creation.
 
+The patched scheduler also compiled through explicit template instantiation with
+the actual DXMT headers and LLVM-MinGW adapters for x64, ARM64EC and x86. All
+three object compilations passed. Private commands, logs and object hashes are
+under `diagnostics/performance-g2-2026-10-10/` beside the worktrees. This is
+compile-only validation, not a linked DXMT DLL/archive or native runtime test.
+
 An initial scheduler run hung at idle shutdown. The existing destructor changes
 the wait predicate and notifies without holding the waiter's mutex. A forced
 predicate-to-wait gap reproduces that lost notification in the original
