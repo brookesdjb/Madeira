@@ -33,3 +33,10 @@ Host ASan/UBSan verifies actual ring concurrency, bounds, restart, disabled stat
 and timestamp order; source staging fails closed if its anchor changes. Physical
 clock accuracy, native callback delivery, overhead, background interruption and
 paired benchmark acceptance must be measured separately.
+
+Capture also exports `automation-capture-metadata.json` with the same capture ID.
+Only the start/end boundaries query `getrusage(RUSAGE_SELF)` for process user and
+system CPU time and `TASK_VM_INFO` for footprint. The monotonic wall window
+brackets recorder activation/drain; these are whole app CPU totals, including
+UI heartbeat work, not Wine role attribution, frame encoding or GPU timing.
+Unavailable counters export null. No extra query is added to Present.
