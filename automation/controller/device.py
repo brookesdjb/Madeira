@@ -168,6 +168,47 @@ class DeviceControl:
                 handle.seek(max(0, handle.tell() - 2_000_000))
                 return diagnostic_events(handle.read().decode("utf-8", errors="replace"))
 
+    def app_process_ids(self, udid, bundle_id):
+        """Main-app processes only; its PlugIns contain separately running helpers."""
+        apps = self.command(["device", "info", "apps", "--device", udid, "--bundle-id", bundle_id], 30)
+        if not isinstance(apps.get("apps"), list) or len(apps["apps"]) != 1:
+            raise AutomationError("probe_app_identity_unavailable")
+        app = apps["apps"][0]
+        if app.get("bundleIdentifier") != bundle_id or not isinstance(app.get("url"), str):
+            raise AutomationError("probe_app_identity_mismatch")
+        prefix = urllib.parse.unquote(urllib.parse.urlparse(app["url"]).path).rstrip("/") + "/"
+        data = self.command(["device", "info", "processes", "--device", udid], 30)
+        if not isinstance(data.get("runningProcesses"), list):
+            raise AutomationError("unsupported_process_schema")
+        found = []
+        for p in data["runningProcesses"]:
+            if not isinstance(p.get("executable"), str):
+                raise AutomationError("unsupported_process_executable_schema")
+            path = urllib.parse.unquote(urllib.parse.urlparse(p["executable"]).path)
+            if Path(path).parent == Path(prefix):
+                pid = p.get("processIdentifier")
+                if isinstance(pid, bool) or not isinstance(pid, int) or pid <= 0:
+                    raise AutomationError("unsupported_process_identifier")
+                found.append(pid)
+        return found
+
+    def terminate_probe_process(self, udid, bundle_id, pid):
+        """Stop only a fresh standalone probe whose PID came from its status.
+
+        An attached debugger can make XCTest termination stall. Never use this
+        for normal games, guessed PIDs or a preexisting process.
+        """
+        if isinstance(pid, bool) or not isinstance(pid, int) or pid <= 0:
+            raise AutomationError("invalid_probe_process_identity")
+        pids = self.app_process_ids(udid, bundle_id)
+        if pids and pids != [pid]:
+            raise AutomationError("probe_process_identity_changed")
+        if pids:
+            self.command(["device", "process", "terminate", "--device", udid, "--pid", str(pid), "--kill"], 30)
+        if self.app_process_ids(udid, bundle_id):
+            raise AutomationError("probe_process_still_running")
+        return {"backend": "devicectl", "confirmed_stopped": True}
+
 
 def diagnostic_events(text):
     """Export only fixed events; no free text, paths, tokens, or account identifiers."""

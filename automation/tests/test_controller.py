@@ -119,6 +119,34 @@ def test_install_stopped_target_with_other_app_running_preserves_app_path(tmp_pa
     assert calls[-1][-1] == str(app)
 
 
+@pytest.mark.parametrize("actual_pid", [42, 99])
+def test_native_probe_cleanup_checks_bundle_and_pid_before_kill(actual_pid):
+    calls, stopped = [], False
+    def runner(argv, timeout):
+        nonlocal stopped
+        calls.append(argv)
+        if "apps" in argv:
+            result = {"apps": [{"bundleIdentifier": "test.madeira", "url": "file:///private/apps/owned/Madeira.app/"}]}
+        elif "processes" in argv:
+            result = {"runningProcesses": [] if stopped else [
+                {"executable": "file:///private/apps/owned/Madeira.app/Madeira", "processIdentifier": actual_pid},
+                {"executable": "file:///private/apps/owned/Madeira.app/PlugIns/Helper.appex/Helper", "processIdentifier": 16},
+                {"executable": "file:///private/apps/other/Madeira.app/Madeira", "processIdentifier": 15}]}
+        elif "terminate" in argv:
+            assert argv[argv.index("--pid") + 1] == "42" and "--kill" in argv
+            stopped = True; result = {}
+        else: pytest.fail("unexpected device command")
+        Path(argv[argv.index("--json-output") + 1]).write_text(json.dumps({"info":{"outcome":"success"},"result":result}))
+    native = DeviceControl(runner)
+    if actual_pid == 42:
+        assert native.terminate_probe_process("tablet", "test.madeira", 42)["confirmed_stopped"]
+        assert stopped
+    else:
+        with pytest.raises(AutomationError, match="identity_changed"):
+            native.terminate_probe_process("tablet", "test.madeira", 42)
+        assert not stopped and not any("terminate" in c for c in calls)
+
+
 @pytest.mark.parametrize("command", [["install", "unused.app"], ["smoke"], ["jit-test"], ["actions", "unused.json"]])
 def test_cli_reservation_blocks_all_control_before_install_or_session(tmp_path, monkeypatch, capsys, command):
     from automation.controller import cli
@@ -269,6 +297,21 @@ def test_smoke_preserves_preexisting_running_app(appium_server, tmp_path):
     assert report["status"] == "failed"
     assert state["app"] == 4
     assert not any(c[2] and c[2].get("script") == "mobile: terminateApp" for c in state["calls"])
+
+
+@pytest.mark.parametrize("main_pids", [[], [42]])
+def test_background_extension_does_not_hide_a_suspended_main_process(appium_server, tmp_path, main_pids):
+    url, state = appium_server
+    state["app"] = 2
+    class Native(NativeLog):
+        def app_process_ids(self, udid, bundle): return main_pids
+    client = AppiumController(url)
+    client.connect("tablet", "test.madeira")
+    report = Run(client, Native(), {"udid": "tablet"}, "test.madeira", tmp_path).smoke()
+    assert report["status"] == ("failed" if main_pids else "passed")
+    if main_pids:
+        assert state["app"] == 2
+        assert not any(c[2] and c[2].get("script") in ("mobile: launchApp", "mobile: terminateApp") for c in state["calls"])
 
 
 @pytest.mark.parametrize("failure,failed_step", [

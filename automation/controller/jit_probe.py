@@ -75,11 +75,12 @@ def probe(workflow):
     device, bundle = workflow.device, workflow.bundle_id
     try:
         # Don't terminate a potentially live game just to start the experiment.
-        if device.app_state(bundle) not in (0, 1):
+        if not workflow.target_stopped():
             raise AutomationError("jit_probe_requires_Madeira_stopped_before_start")
         workflow.step("launch_test_mode", lambda: device.launch_app(bundle, ["--madeira-automation"]))
         before = workflow.step("read_initial_state", lambda: snapshot(device))
         workflow.report["jit_before"] = before
+        workflow.probe_pid = before.get("pid")
         if before.get("wine_running") or before.get("fex_test") != "NOT_RUN":
             raise AutomationError("jit_probe_requires_fresh_idle_process")
         workflow.step("request_existing_jit", lambda: device.tap_id("madeira.automation.enable-jit"))
@@ -93,10 +94,10 @@ def probe(workflow):
         # Evidence before restart: app logs rotate on launch.
         workflow.diagnostics()
         workflow.report["pre_restart_evidence"] = dict(workflow.report["evidence"])
-        workflow.step("terminate_for_relaunch", lambda: device.terminate_app(bundle))
-        workflow.step("verify_stopped", lambda: workflow.require_state(1))
+        workflow.step("terminate_for_relaunch_and_verify_native", lambda: workflow.native.terminate_probe_process(workflow.info["udid"], bundle, workflow.probe_pid))
         workflow.step("relaunch_test_mode", lambda: device.launch_app(bundle, ["--madeira-automation"]))
         after = workflow.step("read_after_relaunch", lambda: snapshot(device))
+        workflow.probe_pid = after.get("pid")
         if after.get("pid") == before.get("pid") or after.get("fex_test") != "NOT_RUN":
             raise AutomationError("fresh_process_not_confirmed")
         workflow.report["jit_after_relaunch"] = after
