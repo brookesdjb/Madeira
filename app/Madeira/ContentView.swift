@@ -4976,7 +4976,7 @@ private struct AutomationProbePanel: View {
         guard timer == nil, value.valid(), HardwareInput.shared.automationFocus() else { return false }
         plan = value; index = 0; lateness = []; origin = DispatchTime.now().uptimeNanoseconds
         heartbeat(); outcome = "RUNNING"
-        let source = Timer(timeInterval: 0.004, repeats: true) { [weak self] _ in self?.tick() }
+        let source = Timer(timeInterval: 0.004, repeats: true) { [weak self] _ in MainActor.assumeIsolated { self?.tick() } }
         timer = source; RunLoop.main.add(source, forMode: .common); return true
     }
     private func tick() {
