@@ -548,6 +548,7 @@ struct JITSettingsSection: View {
             } label: {
                 Label("JIT setup", systemImage: "bolt.badge.clock")
             }
+            .accessibilityIdentifier("madeira.jit.setup")
             if onboarding.available {
                 Button {
                     onboarding.rerun()

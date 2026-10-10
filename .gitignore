@@ -165,3 +165,13 @@ app/Madeira/i386-windows/*
 # Madeira Dock: built from madeira-dock by build/madeira-dock/build.sh
 app/Madeira/arm64ec-windows/dockhost.exe
 app/Madeira/arm64ec-windows/dock-notices.txt
+
+# Local automation tools and private device evidence
+/automation/.venv
+/automation/.appium/
+/automation/node_modules
+/automation/runs/
+/automation/derived-data/
+/automation/provisioning/
+__pycache__/
+.pytest_cache/

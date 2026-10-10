@@ -118,7 +118,7 @@ struct AllSettingsView: View {
             .searchable(text: $search, prompt: "Search options")
             .navigationTitle("All settings")
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
+            .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() }.accessibilityIdentifier("madeira.settings.done") } }
             .onAppear { values = MadeiraConfig.all() }
         }
     }

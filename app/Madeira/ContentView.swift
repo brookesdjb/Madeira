@@ -251,6 +251,13 @@ final class MetalBackedView: UIView {
     override func didMoveToWindow() {
         super.didMoveToWindow()
         guard let w = window else { return }   // detach: leave the host be
+        #if DEBUG && MADEIRA_AUTOMATION
+        if AutomationProbe.enabled {
+            // Read commands may focus the editor while Wine initializes later.
+            // Pin its compositor to the actual surface's window, not that editor.
+            winios_automation_set_presentation_window(Unmanaged.passUnretained(w).toOpaque())
+        }
+        #endif
         MetalBackedView.keyboardTarget = self  // keyboard button targets the live view
         // SwiftUI ancestors attach gesture recognizers that can delay or
         // cancel raw touch delivery (double-tap timing is exactly what
@@ -1279,7 +1286,7 @@ struct ContentView: View {
                     sessionBody
                         .navigationBarHidden(true)
                 } else if library.enabled {
-                    LibraryView(play: launchLibraryEntry, enableJIT: enableJIT,
+                    LibraryView(play: { launchLibraryEntry($0) }, enableJIT: enableJIT,
                                 startDock: { startDock($0, compactPool: $1) })
                 } else {
                     developerBody
@@ -1343,6 +1350,14 @@ struct ContentView: View {
                 DockOffline.begin()
                 FrontendChoice.logStartup()
                 DeviceLoadDiagnostics.start()
+                #if DEBUG && MADEIRA_AUTOMATION
+                if AutomationProbe.enabled {
+                    AutomationProbe.shared.enableJIT = enableJIT
+                    AutomationProbe.shared.runFEX = runFEXTest
+                    AutomationProbe.shared.launch = { launchLibraryEntry($0) }
+                    TouchControlsHost.attach()
+                }
+                #endif
                 // Madeira Dock: an unconsumed sign-in transfer from an earlier run goes.
                 if wine_process_is_running() == 0 { MadeiraDock.cleanup() }
             }
@@ -1671,6 +1686,7 @@ struct ContentView: View {
                         .buttonStyle(.bordered)
                 }
                 Button("All settings") { devSheet = .allSettings }
+                    .accessibilityIdentifier("madeira.settings.open")
                     .buttonStyle(.bordered)
                 Button("Enable JIT") {
                     enableJIT()
@@ -2336,17 +2352,25 @@ struct ContentView: View {
         }
 
         DispatchQueue.global(qos: .userInitiated).async {
+            #if DEBUG && MADEIRA_AUTOMATION
+            let expected: Int64 = AutomationProbe.enabled ? 42 : 0
+            let result = AutomationProbe.enabled ? fex_automation_test_execute() : fex_test_execute()
+            #else
+            let expected: Int64 = 0
             let result = fex_test_execute()
+            #endif
 
             DispatchQueue.main.async {
-                switch result {
-                case 42:
+                #if DEBUG && MADEIRA_AUTOMATION
+                if AutomationProbe.enabled { AutomationProbe.shared.completeFEX(result) }
+                #endif
+                if result == expected {
                     jitStatus = .available
-                    logStore.log("FEX-Emu test PASSED: x86-64 code returned 42!", level: .success)
-                case -1:
+                    logStore.log("FEX-Emu test PASSED: x86-64 ELF exited with code \(result)", level: .success)
+                } else if result == -1 {
                     jitStatus = .unavailable
                     logStore.log("FEX-Emu test FAILED (init/setup error)", level: .error)
-                default:
+                } else {
                     jitStatus = .unavailable
                     logStore.log("FEX-Emu test returned \(result)", level: .error)
                 }
@@ -2502,16 +2526,27 @@ struct ContentView: View {
     /// Play in the library (Library.swift): checks that a session can start,
     /// applies the entry's launch profile and runs the same full sequence as the
     /// developer interface's buttons.
-    private func launchLibraryEntry(_ entry: LibraryEntry) {
+    private func launchLibraryEntry(_ entry: LibraryEntry, storageChecked: Bool = false) {
+        if entry.storageID != "internal", !storageChecked {
+            Task { @MainActor in
+                do {
+                    let access = try await SteamStorageModel.shared.accessForOperation(libraryID: entry.storageID, write: true)
+                    defer { access?.keepAlive() }
+                    SteamOwnedLibrary.shared.storageReconnected(entry.storageID)
+                    launchLibraryEntry(entry, storageChecked: true)
+                } catch { library.error = error.localizedDescription }
+            }
+            return
+        }
         // A Steam game starts through Madeira Dock with its own launch profile (SteamGames.swift),
         // unless its Game details page chose "The game": then its own program starts below, like
         // any library game (SteamDirectStart).
         if let appID = entry.steamAppID, !entry.startsSteamGameDirectly {
-            guard let game = MadeiraDock.games(drive: MadeiraDock.drive).first(where: { $0.id == appID }) else {
+            guard let game = (SteamGamesModel.shared.games + MadeiraDock.games(drive: MadeiraDock.drive)).first(where: { $0.id == appID && $0.storageID == entry.storageID }) else {
                 library.error = "Steam no longer lists this game as installed. Refresh the library and try again."; return
             }
             LogStore.shared.log("[steam-games] play app=\(appID)")
-            startDock(game, compactPool: MadeiraDockModel.shared.compactPool, profile: entry)
+            startDock(game, compactPool: MadeiraDockModel.shared.compactPool, profile: entry, storageChecked: storageChecked)
             return
         }
         if let appID = entry.steamAppID {
@@ -2539,10 +2574,22 @@ struct ContentView: View {
 
     /// The rest of Play, with JIT on: checks the entry's launch profile and starts it.
     private func startLibraryEntry(_ entry: LibraryEntry) {
-        do { if entry.desktop != true { _ = try LibraryModel.executable(entry.launchRelativePath) }; try entry.validate() }
+        if entry.storageID != "internal", SteamStorageModel.shared.sessionAccess?.library.id != entry.storageID {
+            Task { @MainActor in
+                do { try await SteamStorageModel.shared.prepareSession(libraryID: entry.storageID); startLibraryEntry(entry) }
+                catch { library.error = error.localizedDescription }
+            }
+            return
+        }
+        let storageRoot = entry.storageID == "internal" ? nil : SteamStorageModel.shared.sessionAccess?.root
+        do {
+            if entry.desktop != true { _ = try LibraryModel.executable(entry.launchRelativePath, root: storageRoot) }
+            try entry.validate(storageRoot: storageRoot)
+        }
         catch {
             library.error = error.localizedDescription
             logStore.log("[launch-preflight] profile validation failed: \(error.localizedDescription)", level: .error)
+            SteamStorageModel.shared.releaseSession()
             return
         }
         // launchArguments carries the whole ml1163 command (explorer's /desktop=, the quoted
@@ -3255,7 +3302,18 @@ struct ContentView: View {
     /// show in the library, and the session gets the full-screen game view.
     /// `profile` is a Steam game's library entry (its Game details page): the
     /// session then takes that entry's display, performance and on-screen settings.
-    private func startDock(_ game: DockGame, compactPool: Bool, profile: LibraryEntry? = nil) {
+    private func startDock(_ game: DockGame, compactPool: Bool, profile: LibraryEntry? = nil, storageChecked: Bool = false) {
+        if game.storageID != "internal", !storageChecked {
+            Task { @MainActor in
+                do {
+                    let access = try await SteamStorageModel.shared.accessForOperation(libraryID: game.storageID, write: true)
+                    defer { access?.keepAlive() }
+                    SteamOwnedLibrary.shared.storageReconnected(game.storageID)
+                    startDock(game, compactPool: compactPool, profile: profile, storageChecked: true)
+                } catch { library.error = error.localizedDescription }
+            }
+            return
+        }
         let inLibrary = library.enabled
         guard jitReadyForLaunch(inLibrary: inLibrary, entry: profile?.id,
                                 then: { startDock(game, compactPool: compactPool, profile: profile) }) else { return }
@@ -3271,15 +3329,26 @@ struct ContentView: View {
             return
         }
         func fail(_ error: Error) {
+            SteamStorageModel.shared.releaseSession()
             MadeiraDock.cleanup()
             SteamOwnedLibrary.shared.dockEnded()
             MadeiraDockModel.shared.status = error.localizedDescription
             logStore.log("[madeira-dock] not started: \(error.localizedDescription)", level: .error)
             if inLibrary { library.error = error.localizedDescription }
         }
+        if game.storageID != "internal", SteamStorageModel.shared.sessionAccess?.library.id != game.storageID {
+            Task { @MainActor in
+                do {
+                    try await SteamStorageModel.shared.prepareSession(libraryID: game.storageID)
+                    startDock(game, compactPool: compactPool, profile: profile)
+                } catch { fail(error) }
+            }
+            return
+        }
+        let storageRoot = game.storageID == "internal" ? nil : SteamStorageModel.shared.sessionAccess?.root
         do {
-            try MadeiraDock.validate(game, drive: MadeiraDock.drive)
-            try profile?.validate()
+            try MadeiraDock.validate(game, drive: MadeiraDock.drive, libraryRoot: storageRoot)
+            try profile?.validate(storageRoot: storageRoot)
             guard SteamSignIn.isSignedIn else { throw DockError.message("Sign in to Steam in Madeira before starting Dock.") }
         } catch { fail(error); return }
         // Only one sign-in of the account may be online: the app's own Steam connection
@@ -3293,7 +3362,7 @@ struct ContentView: View {
             // a launcher started through a .bat, say) it is key 0, which every Dock start
             // used before; Dock stops at once if Steam names that entry missing.
             let options = await SteamOwnedLibrary.shared.launchOptions(appID: game.id)
-            let installFolder = MadeiraDock.drive.appendingPathComponent(game.library + "/common/" + game.installDir)
+            let installFolder = (storageRoot ?? MadeiraDock.drive).appendingPathComponent(game.library + "/common/" + game.installDir)
             let chosen = options.flatMap { SteamDirectStart.choose($0, installFolder: installFolder)?.launchIndex }
             let launchOption = chosen ?? 0
             LogStore.shared.log("[madeira-dock] launch option \(launchOption)\(chosen == nil ? " (none chosen: the default)" : "")")
@@ -3312,7 +3381,7 @@ struct ContentView: View {
             MadeiraDock.configure(game, launchOption: launchOption)
             // The game's one-time installs (its Steam install script) run first, in the same
             // session. No session runs yet, so the registry files can be read and written.
-            DockInstallers.prepare(game, drive: MadeiraDock.drive, prefix: MadeiraDock.prefix)
+            DockInstallers.prepare(game, drive: MadeiraDock.drive, prefix: MadeiraDock.prefix, externalRoot: storageRoot)
             // Only a start that runs installers turns madsync off, for its own session
             // (build/madsync/madsync.c reads MADEIRA_MADSYNC_SESSION once, when the server starts).
             if DockInstallers.serverSync {
@@ -3882,6 +3951,13 @@ final class TouchControlsModel: ObservableObject {
 /// the game underneath — mouse-look must keep working between the buttons.
 final class ControlsWindow: UIWindow {
     override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
+        #if DEBUG && MADEIRA_AUTOMATION
+        // The command panel lives above the raw Metal window, including during
+        // startup. Only its measured rectangle takes touches from the game.
+        if AutomationProbe.enabled, AutomationProbe.panelRect.contains(point) {
+            return super.hitTest(point, with: event)
+        }
+        #endif
         let m = TouchControlsModel.shared
         // Edit mode owns the whole screen: drags and the scale pinch must not
         // leak through and swing the camera while you are arranging buttons.
@@ -3963,6 +4039,23 @@ struct TouchControlsOverlay: View {
                         MappingPanel(control: m.controls[i], screen: geo.size)
                     }
                 }
+                #if DEBUG && MADEIRA_AUTOMATION
+                if AutomationProbe.enabled {
+                    AutomationProbePanel(
+                        enableJIT: { AutomationProbe.shared.enableJIT() },
+                        runFEX: { AutomationProbe.shared.runFEX() },
+                        launch: { AutomationProbe.shared.launch($0) })
+                        .background(GeometryReader { panel in
+                            Color.clear
+                                .onAppear { AutomationProbe.panelRect = panel.frame(in: .global) }
+                                .onChange(of: panel.frame(in: .global)) { _, rect in
+                                    AutomationProbe.panelRect = rect
+                                }
+                        })
+                        .onDisappear { AutomationProbe.panelRect = .zero }
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+                }
+                #endif
             }
             .frame(width: geo.size.width, height: geo.size.height, alignment: .top)
             .contentShape(Rectangle())
@@ -4614,3 +4707,221 @@ struct MappingPanel: View {
         .buttonStyle(.plain)
     }
 }
+
+
+#if DEBUG && MADEIRA_AUTOMATION
+/// Narrow XCTest-accessible probe, compiled out unless BOTH flags are set.
+/// No socket, URL handler, arbitrary code evaluation or account operations.
+@MainActor final class AutomationProbe: ObservableObject {
+    static let enabled = ProcessInfo.processInfo.arguments.contains("--madeira-automation")
+    static let shared = AutomationProbe()
+    static var panelRect = CGRect.zero
+    // The normal ContentView actions are registered before the overlay attaches.
+    var enableJIT: () -> Void = {}
+    var runFEX: () -> Void = {}
+    var launch: (LibraryEntry) -> Void = { _ in }
+    @Published private(set) var snapshot = "{}"
+    @Published private(set) var commandReply = "{}"
+    private var requests = AutomationRequestLedger()
+    private var ownedGame: UUID?
+    private var launchRequested = false
+    private var stopRequested = false
+    private var fexState = "NOT_RUN"
+    private var result: Int64?
+    private var sequence = 0
+
+    func refresh() {
+        sequence += 1
+        let jit = JITCoordinator.shared
+        let model = LibraryModel.shared
+        var manual = model.cloudNotice != nil || model.restartNotice != nil || model.jitNotice != nil
+        // A sheet transition can dismiss the alert without resolving its hold.
+        // Observe the underlying save gate, not only the alert's presentation.
+        if launchRequested, model.current == nil, let id = ownedGame,
+           let appID = model.entries.first(where: { $0.id == id })?.steamAppID,
+           let hold = SteamOwnedLibrary.shared.cloudHold(appID) {
+            switch hold {
+            case .unchecked, .conflict: manual = true
+            case .syncing, .stale: break
+            }
+        }
+        let phase = manual ? "MANUAL_INTERVENTION_REQUIRED" : (model.error != nil ? "ERROR" :
+            (model.current != nil ? (stopRequested ? "STOP_REQUESTED" : "SESSION_OBSERVED") :
+                (LibraryModel.sessionsThisRun > 0 ?
+                    (wine_process_is_running() == 0 && wineserver_is_running() == 0 ? "EXITED" : "SESSION_ENDING") :
+                    (launchRequested ? "LAUNCH_REQUESTED" : "IDLE"))))
+        let data: [String: Any] = [
+            "schema_version": 1,
+            "sequence": sequence,
+            "timestamp": ISO8601DateFormatter().string(from: Date()),
+            "pid": Int(getpid()),
+            "state": jit.busy ? "INITIALIZING_JIT" : (model.current != nil ? "SESSION_ACTIVE" : "APP_IDLE"),
+            "jit_ready": StikJITHelper.ready,
+            "jit_debugged": SigningStatus.current.debugged,
+            "debugger_attached": isDebuggerAttached(),
+            "launch_pool_allocated": StikJITHelper.poolTaken,
+            "jit_busy": jit.busy,
+            "jit_error": jit.error != nil,
+            "jit_method": jit.resolvedMethod.rawValue,
+            "wine_running": wine_process_is_running() != 0,
+            "wineserver_running": wineserver_is_running() != 0,
+            "wineserver_ready": wineserver_is_ready() != 0,
+            "present_count": madeira_get_present_count(),
+            "thermal_state": DeviceLoadDiagnostics.thermalName(ProcessInfo.processInfo.thermalState),
+            "fex_test": fexState,
+            "fex_result": result.map { NSNumber(value: $0) as Any } ?? NSNull(),
+            "game_status": ["phase": phase, "readiness": "NOT_VERIFIED",
+                "active_library_id": model.current.map { $0.uuidString as Any } ?? NSNull(),
+                "owned_by_automation": ownedGame != nil && model.current == ownedGame,
+                "launching": model.launching, "sessions_this_process": LibraryModel.sessionsThisRun,
+                "last_error": model.error == nil ? NSNull() : "normal_launch_error" as Any]
+        ]
+        guard let encoded = try? JSONSerialization.data(withJSONObject: data, options: [.sortedKeys]),
+              let text = String(data: encoded, encoding: .utf8) else { return }
+        snapshot = text
+    }
+
+    func command(_ text: String, launch: (LibraryEntry) -> Void) {
+        var id: String?
+        func reply(_ status: String, _ code: String? = nil, data: Any? = nil) {
+            refresh()
+            let object: [String: Any] = ["schema_version": 2, "request_id": id as Any? ?? NSNull(),
+                "status": status, "code": code as Any? ?? NSNull(), "pid": Int(getpid()),
+                "timestamp": ISO8601DateFormatter().string(from: Date()), "data": data ?? NSNull()]
+            if let bytes = try? JSONSerialization.data(withJSONObject: object, options: [.sortedKeys]),
+               let value = String(data: bytes, encoding: .utf8) { commandReply = value }
+        }
+        guard Self.enabled else { reply("rejected", "automation_not_enabled"); return }
+        let request: AutomationCommand
+        do {
+            request = try AutomationCommand.parse(text); id = request.request_id
+            try requests.accept(request.request_id)
+        } catch {
+            reply("rejected", (error as? AutomationCommand.Failure)?.rawValue ?? "invalid_request"); return
+        }
+        let model = LibraryModel.shared
+        switch request.operation {
+        case .games:
+            // Existing library entries only. No account or arbitrary filesystem discovery.
+            reply("completed", data: installedEntries().map {
+                ["library_id": $0.id.uuidString, "title": $0.title,
+                 "steam_app_id": $0.steamAppID.map { $0 as Any } ?? NSNull(), "storage_id": $0.storageID] as [String: Any]
+            })
+        case .status, .game, .runtime, .jit, .diagnostics:
+            refresh()
+            reply("completed", data: (try? JSONSerialization.jsonObject(with: Data(snapshot.utf8))) ?? NSNull())
+        case .launch, .stop:
+            // Resolve the identifier once; multiple storage copies are ambiguous by App ID.
+            let targets = installedEntries().filter { entry in
+                entry.desktop != true && (request.library_id.map { $0 == entry.id } ?? (entry.steamAppID == request.steam_app_id))
+            }
+            guard targets.count == 1, let entry = targets.first else { reply("rejected", "game_missing_or_ambiguous"); return }
+            if request.operation == .launch {
+                guard model.enabled, !launchRequested, model.current == nil,
+                      LibraryModel.sessionsThisRun == 0, fexState == "NOT_RUN",
+                      wine_process_is_running() == 0, wineserver_is_running() == 0,
+                      !JITCoordinator.shared.busy else { reply("rejected", "fresh_idle_process_required"); return }
+                guard StikJITHelper.ready, isDebuggerAttached() else { reply("rejected", "jit_required"); return }
+                guard model.error == nil, model.cloudNotice == nil, model.restartNotice == nil,
+                      model.jitNotice == nil else { reply("rejected", "manual_intervention_required"); return }
+                ownedGame = entry.id; launchRequested = true
+                launch(entry) // Same Play path, including storage validation and cloud-save holds.
+                reply("accepted", "launch_requested")
+            } else {
+                guard ownedGame == entry.id, model.current == entry.id, !model.launching,
+                      !stopRequested else { reply("rejected", "active_owned_session_required"); return }
+                stopRequested = true
+                model.requestQuit() // Graceful close only; the game may ask to save/confirm.
+                reply("accepted", "graceful_stop_requested")
+            }
+        }
+    }
+
+    private func installedEntries() -> [LibraryEntry] {
+        LibraryModel.shared.entries.filter { entry in
+            guard entry.desktop != true else { return false }
+            if let appID = entry.steamAppID {
+                return SteamGamesModel.shared.games.contains {
+                    $0.id == appID && $0.storageID == entry.storageID && $0.installed
+                }
+            }
+            // A3's initial standalone fixture path is internal only. External
+            // access must come through the normal storage model, never a raw path.
+            return entry.storageID == "internal" && (try? LibraryModel.executable(entry.launchRelativePath)) != nil
+        }
+    }
+
+    func beginFEX(_ run: () -> Void) {
+        // A dedicated, fresh process is required. Never run a probe over a game.
+        guard Self.enabled, fexState == "NOT_RUN", StikJITHelper.ready, isDebuggerAttached(),
+              !JITCoordinator.shared.busy, LibraryModel.shared.current == nil,
+              wine_process_is_running() == 0, wineserver_is_running() == 0 else { return }
+        fexState = "RUNNING"
+        refresh()
+        run() // Existing ContentView.runFEXTest -> fex_test_execute, no new startup path.
+    }
+
+    func completeFEX(_ value: Int64) {
+        result = value
+        fexState = value == 42 ? "PASSED" : "FAILED"
+        refresh()
+    }
+}
+
+private struct AutomationProbePanel: View {
+    let enableJIT: () -> Void
+    let runFEX: () -> Void
+    let launch: (LibraryEntry) -> Void
+    @State private var request = ""
+    @FocusState private var requestFocused: Bool
+    @ObservedObject private var probe = AutomationProbe.shared
+
+    private func restoreGameFocus() {
+        requestFocused = false
+        // Typing into the overlay can make its window key. Winios attaches its
+        // compositor to the key window at startup: restore the normal app
+        // window before dispatch, so guest rendering cannot cover this HUD.
+        let scene = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
+            .first { $0.activationState == .foregroundActive }
+        scene?.windows.first { $0.windowLevel == .normal && !$0.isHidden }?.makeKey()
+    }
+
+    var body: some View {
+        VStack(spacing: 4) {
+            Text("Development automation")
+                .accessibilityIdentifier("madeira.automation.status")
+                .accessibilityValue(probe.snapshot)
+            HStack {
+                TextField("JSON command", text: $request)
+                    .textInputAutocapitalization(.never).autocorrectionDisabled()
+                    .focused($requestFocused)
+                    .accessibilityIdentifier("madeira.automation.command")
+                Button("Send command") {
+                    restoreGameFocus()
+                    probe.command(request, launch: launch)
+                }.accessibilityIdentifier("madeira.automation.send-command")
+                Text("Command reply").accessibilityIdentifier("madeira.automation.reply")
+                    .accessibilityValue(probe.commandReply)
+            }
+            HStack {
+                Button("Refresh") { probe.refresh() }
+                    .accessibilityIdentifier("madeira.automation.refresh")
+                Button("Enable JIT") {
+                    guard !JITCoordinator.shared.busy, LibraryModel.shared.current == nil,
+                          wine_process_is_running() == 0 else { return }
+                    restoreGameFocus()
+                    enableJIT()
+                    probe.refresh()
+                }
+                .accessibilityIdentifier("madeira.automation.enable-jit")
+                Button("Test FEX") { restoreGameFocus(); probe.beginFEX(runFEX) }
+                    .accessibilityIdentifier("madeira.automation.test-fex")
+            }
+            .buttonStyle(.bordered)
+        }
+        .padding(6)
+        .background(.regularMaterial)
+        .onAppear { probe.refresh() }
+    }
+}
+#endif

@@ -16,9 +16,12 @@ bool fex_initialize(void);
 void fex_shutdown(void);
 
 // Test FEXCore by translating and executing a trivial x86-64 program.
-// The test program does: mov eax, 42; ret
-// Returns 42 on success, negative on failure.
+// The current Hello World ELF exits with 0; negative values indicate setup failure.
 int64_t fex_test_execute(void);
+
+// Linked only in opted-in Debug automation builds. Uses the same ELF loader,
+// with a freestanding sys_exit(42) fixture instead of Hello World.
+int64_t fex_automation_test_execute(void);
 
 // Log callback type (same as JIT allocator)
 typedef void (*fex_log_callback_t)(const char *message);
