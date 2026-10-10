@@ -56,3 +56,16 @@ def test_hot_device_does_not_start_benchmark(monkeypatch,tmp_path):
     with pytest.raises(AutomationError,match='rise_device_too_hot'):
         r.run_from_result(w,'reader',clock=clock,pause=pause)
     assert calls==['enter']
+
+
+def test_fresh_selected_menu_starts_only_once(monkeypatch,tmp_path):
+    w,calls,clock,pause=setup(monkeypatch,tmp_path,[checkpoint(menu=True),checkpoint(menu=True),checkpoint(),checkpoint(True),checkpoint(True)])
+    result=r.run_from_result(w,'reader',selected_menu=True,clock=clock,pause=pause)
+    assert result['status']=='completed' and calls==['enter']
+
+
+def test_fresh_menu_does_not_accept_existing_result(monkeypatch,tmp_path):
+    w,calls,clock,pause=setup(monkeypatch,tmp_path,[checkpoint(True)])
+    with pytest.raises(AutomationError,match='rise_requires_selected_menu'):
+        r.run_from_result(w,'reader',selected_menu=True,clock=clock,pause=pause)
+    assert calls==[]

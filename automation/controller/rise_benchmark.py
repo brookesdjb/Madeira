@@ -62,7 +62,11 @@ def enter(device, transport, *, clock=time.monotonic, pause=time.sleep):
     raise AutomationError('rise_input_timeout')
 
 
-def run_from_result(workflow, executable, *, timeout=360, clock=time.monotonic, pause=time.sleep):
+def run_from_result(workflow, executable, *, selected_menu=False, timeout=360, clock=time.monotonic, pause=time.sleep):
+    # For a fresh process, the caller may explicitly attest that Start Benchmark
+    # is selected on a visually checked main menu. Never guess its selection.
+    if type(selected_menu) is not bool:
+        raise AutomationError('invalid_rise_start_checkpoint')
     if type(timeout) is not int or not 180 <= timeout <= 600:
         raise AutomationError('invalid_rise_timeout')
     a = workflow.device
@@ -101,9 +105,10 @@ def run_from_result(workflow, executable, *, timeout=360, clock=time.monotonic, 
 
     started = clock()
     try:
-        if not screen('initial')['result_ready']:
-            raise AutomationError('rise_requires_result_screen')
-        enter(a, t, clock=clock, pause=pause)
+        if not screen('initial')['menu_ready' if selected_menu else 'result_ready']:
+            raise AutomationError('rise_requires_selected_menu' if selected_menu else 'rise_requires_result_screen')
+        if not selected_menu:
+            enter(a, t, clock=clock, pause=pause)
         deadline = clock() + 90
         while clock() < deadline:
             observe()

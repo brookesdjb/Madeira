@@ -14,11 +14,14 @@ swiftc automation/controller/rise_checkpoint.swift -o /tmp/madeira-rise-checkpoi
 `rise_benchmark.run_from_result(workflow, executable)` requires the caller to hold
 `reserve_device` and an authenticated paired transport for the entire call. It
 verifies foreground state, automation ownership and installed Steam app 391220.
-Start on a previous benchmark's result screen. The adapter dismisses it, waits
+By default, start on a previous benchmark's result screen. The adapter dismisses it, waits
 for the main menu, presses Enter on the previously selected Start Benchmark item,
 and requires departure from menus/results before accepting two identical fresh
 result observations. Unknown navigation or a non-starting benchmark times out;
-it does not send speculative extra input. Evidence is written under the caller's
+it does not send speculative extra input. For the first run in a fresh process,
+`selected_menu=True` skips result dismissal after the caller has visually verified
+that Start Benchmark is selected. Menu recognition verifies the menu labels, not
+the highlighted selection. Evidence is written under the caller's
 private run directory, including failed attempts. Result-screen recognition alone
 does not establish visual correctness throughout gameplay.
 
