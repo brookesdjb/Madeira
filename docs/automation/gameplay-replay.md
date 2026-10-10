@@ -30,3 +30,19 @@ host heartbeat. An inactive/menu/cloud-held session never receives replay input.
 Host validation covers the actual Swift command/plan parser and Python's
 preflight validator. Physical keyboard/mouse/pad response, focus interruption,
 heartbeat release and a reproducible gameplay checkpoint remain separate gates.
+
+## On-device measurement window
+
+`start_benchmark` combines replay with `warmup_ms` and `capture_ms`. Their sum
+must equal the plan duration. The native replay timer starts capture after warmup
+and freezes/exports it at the end, then releases input. This avoids opening the
+command editor during measurement (which correctly interrupts gameplay focus).
+`benchmark-capture PLAN --warmup 60 --seconds 180` maintains the existing Refresh
+heartbeat, requires an API-owned session and the same foreground PID throughout,
+retrieves the frozen trace under the same reservation and exports summaries.
+It never launches, quits or force-kills an unknown game. Interrupted/lost captures
+fail; they cannot reuse a prior export as a successful benchmark.
+
+Capture establishes telemetry, not gameplay readiness or an optimization result.
+A paired experiment still needs matched scenes/cache/thermal conditions, source
+and installed-binary manifests, multiple independent trials and sustained tests.
