@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "integration_branch": "integration/ipad",
-  "source_merge_commit": "9883eb0356fa530d5e9d62e7df4da27666e2c13f",
+  "source_merge_commit": "60748b41f03030c60c77f5ea7b68b0535261ba39",
   "inputs": [
     {
       "name": "upstream",
@@ -36,7 +36,7 @@
     {
       "name": "w1-22",
       "ref": "perf/w1-wake-coalescing",
-      "commit": "46598caedc1d22011bcc3ddf1f16352e5518d60e"
+      "commit": "5ba42e5adc57f1fee9fe6bfe461e3f356a6e8072"
     },
     {
       "name": "g2-23",
@@ -52,12 +52,22 @@
       "name": "telemetry-25",
       "ref": "perf/baseline-telemetry",
       "commit": "028c036ecb06ad7a27fa5e757a89e21f55dfaa61"
+    },
+    {
+      "name": "capture-26",
+      "ref": "perf/native-frame-capture",
+      "commit": "14f1d4d81ff2178a6cf16b604e98f5b6c678bc83"
+    },
+    {
+      "name": "replay-27",
+      "ref": "automation/gameplay-replay",
+      "commit": "154079167883c1f7de4ef7d4c0a2c45377427892"
     }
   ],
   "control_branch": "integration/ipad-control",
   "control_commit": "5cf22968d75a2081adf9b6d8c2c6e7d25f023c7f",
   "validation": {
-    "harness_host": "104 passed, 2 device wrappers skipped",
+    "harness_host": "136 passed, 2 device wrappers skipped",
     "swift_ios": "66 production sources, normal Debug and opted-in automation type-check passed",
     "native_ios": "changed ntdll and wineserver sources compile as arm64 objects",
     "affected_host_checks": [
@@ -71,9 +81,12 @@
       "ios-cache",
       "compiler-cap"
     ],
-    "app_link": "NOT_PERFORMED",
-    "install": "NOT_PERFORMED",
-    "device_performance": "NOT_PERFORMED"
+    "app_link": "SIGNED_AUTOMATION_DEBUG_BUILT",
+    "install": "SAME_BUNDLE_INSTALLED_WITHOUT_UNINSTALL",
+    "device_performance": "VERIFIED_W1_OFF_ON_STATIC_PILOT_NO_SPEEDUP_ACCEPTED",
+    "normal_exclusion": "corrected native archives: signed Debug and Release passed",
+    "measured_app_source": "0a44cdedbfbf15b783e3b593f2c5054d98a372ae"
   },
-  "experimental_patches_applied": false
+  "experimental_patches_applied": false,
+  "control_status": "OLDER_SOURCE_NOT_MATCHED_TO_NEW_CAPTURE_REPLAY"
 }
