@@ -45,6 +45,14 @@
 semaphore_t ios_srv_wake_sem = 0;
 static struct ios_request_wake_state ios_srv_request_wake;
 static int ios_srv_coalesce;
+/* Read-only experiment evidence: acquire the published semaphore before
+ * observing its startup policy. -1 means no usable semaphore, not disabled. */
+int ios_wineserver_wake_mode(void)
+{
+    if (!__atomic_load_n( &ios_srv_wake_sem, __ATOMIC_ACQUIRE )) return -1;
+    return __atomic_load_n( &ios_srv_coalesce, __ATOMIC_RELAXED );
+}
+
 void ios_wineserver_wake(void)
 {
     semaphore_t sem = __atomic_load_n( &ios_srv_wake_sem, __ATOMIC_ACQUIRE );

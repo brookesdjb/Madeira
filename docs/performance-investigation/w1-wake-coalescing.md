@@ -67,3 +67,8 @@ and #2's paired/sustained protocol. No device speedup is claimed.
 
 Remove the switch or set it to `0`, then restart, to restore the unchanged
 default. Revert the W1 commit to remove the experimental path entirely.
+
+`ios_wineserver_wake_mode()` exposes the initialized backend policy read-only.
+It acquires the published semaphore before reading the atomic startup policy;
+-1 means no usable semaphore. The opt-in capture sidecar can record this at its
+boundaries without transferring a growing live log or adding hot-path queries.
