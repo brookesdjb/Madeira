@@ -78,6 +78,10 @@ native components require `--setting MTL_LANGUAGE_REVISION=Metal31`; pass that
 through BUILD_FLAGS. `--automation --configuration Release` is rejected.
 Successful builds verify the actual compiled app's probe inclusion/exclusion,
 record binary SHA-256 values, and verify signed bundles with codesign.
+Signed builds clean only that variant's isolated products first: the existing
+bundle scripts rewrite nested resources on incremental builds, and Xcode can
+skip the outer CodeSign, producing an invalid resource seal despite reporting
+BUILD SUCCEEDED. Unsigned compilation can remain incremental.
 Build reports and owner-only compiler logs are retained under
 `automation/runs/builds/`, including failures. Compiler output stays local.
 Signing must already be provisioned; automatic account/provisioning changes are

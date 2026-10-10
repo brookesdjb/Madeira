@@ -32,6 +32,12 @@ The build CLI now records source commit/dirty status, binary hashes and private
 compiler logs, including failures. It isolates each build variant and rejects
 enabling the automation probe in Release. New compiled-artifact tests detect an
 unexpected probe in a normal artifact and a missing probe in a test artifact.
+An additional incremental signed rebuild reported BUILD SUCCEEDED but failed
+strict signature verification with an invalid sealed resource. The existing
+bundle scripts re-sign/rewrite nested resources while Xcode can omit the outer
+CodeSign on incremental runs. Signed harness builds now clean only their isolated
+variant products before rebuilding and verifying; shared component inputs remain
+intact. This failure was detected before any installation of that artifact.
 
 Representative commands (team and bundle names are local provisioning choices):
 

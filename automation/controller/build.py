@@ -63,6 +63,7 @@ def build_app(root, bundle_id, team=None, configuration="Debug", automation=Fals
     arguments.extend(settings)
     report = {"schema_version": 1, "configuration": configuration, "automation": automation,
               "signed": not unsigned, "hardware_validation": "NOT_PERFORMED",
+              "clean_signed_build": not unsigned,
               "started_at": datetime.now(timezone.utc).isoformat(), "status": "running",
               "private_build_log": str(log)}
     try:
@@ -70,7 +71,13 @@ def build_app(root, bundle_id, team=None, configuration="Debug", automation=Fals
         report["source_dirty"] = bool(subprocess.check_output(["git", "-C", str(root), "status", "--porcelain"], text=True))
         with log.open("w") as output:
             os.chmod(log, 0o600)
-            result = subprocess.run([*arguments, "build"], stdout=output, stderr=subprocess.STDOUT,
+            # Existing bundle phases rewrite/re-sign nested resources every
+            # build. Xcode can skip the outer CodeSign on an incremental run,
+            # leaving an invalid resource seal despite BUILD SUCCEEDED. Clean
+            # this variant's isolated products before signed builds so the
+            # outer bundle is freshly sealed; never clean shared inputs.
+            actions = ["clean", "build"] if not unsigned else ["build"]
+            result = subprocess.run([*arguments, *actions], stdout=output, stderr=subprocess.STDOUT,
                                     timeout=1800, cwd=root)
         if result.returncode:
             raise AutomationError(f"xcodebuild_failed:exit_{result.returncode}:private_log:{log}")
