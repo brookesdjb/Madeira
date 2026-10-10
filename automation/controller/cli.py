@@ -58,6 +58,12 @@ def parser():
     benchmark.add_argument("plan")
     benchmark.add_argument("--warmup", type=int, default=60)
     benchmark.add_argument("--seconds", type=int, default=180)
+    comparison = sub.add_parser("benchmark-compare", help="Offline comparison of independent iteration records; no device access")
+    comparison.add_argument("--baseline", nargs="+", required=True, help="Baseline iteration JSON files")
+    comparison.add_argument("--candidate", nargs="+", required=True, help="Candidate iteration JSON files")
+    comparison.add_argument("--min-iterations", type=int, default=5)
+    comparison.add_argument("--min-effect", type=float, default=0.03, help="Relative median difference that matters")
+    comparison.add_argument("--max-cv", type=float, default=0.15, help="Coefficient of variation above which data is too noisy")
     sub.add_parser("jit-test")
     visual = sub.add_parser("compare-images")
     visual.add_argument("baseline")
@@ -125,6 +131,13 @@ def main(argv=None):
             result = export_trace(args.trace, args.output, args.budget_ms)
             print(json.dumps(result))
             return 0
+        if args.command == "benchmark-compare":
+            from .benchmark_compare import export_comparison
+            result = export_comparison(args.baseline, args.candidate, args.output, min_iterations=args.min_iterations,
+                                       min_effect=args.min_effect, max_cv=args.max_cv)
+            print(json.dumps(result))
+            # 0: no regression established; 1: regressed or needs review; 3: inconclusive.
+            return {"improved": 0, "no_meaningful_difference": 0, "regressed": 1, "review": 1}.get(result["status"], 3)
         native = DeviceControl()
         if args.command == "devices":
             print(json.dumps({"devices": native.devices()}))
