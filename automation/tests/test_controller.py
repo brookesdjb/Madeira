@@ -143,7 +143,7 @@ def test_remote_or_credential_bearing_server_rejected(url):
 @pytest.fixture
 def appium_server():
     state = {"calls": [], "app": 1, "fail_settings": False, "session": False,
-             "fail_command": None, "launch_stays_stopped": False}
+             "fail_command": None, "launch_stays_stopped": False, "displayed": True, "orientation": "LANDSCAPE"}
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, *args): pass
         def do_GET(self): self.handle_request()
@@ -170,6 +170,11 @@ def appium_server():
                 value, status = {"error": "unknown error", "message": "password=DO_NOT_EXPORT"}, 500
             elif self.path.endswith("/attribute/selected"):
                 value = "true"
+            elif self.path.endswith("/displayed"):
+                value = state["displayed"]
+            elif self.path.endswith("/orientation"):
+                if self.command == "POST": state["orientation"] = body["orientation"]
+                value = state["orientation"]
             elif self.path.endswith("/screenshot"):
                 value = base64.b64encode(b"\x89PNG\r\n\x1a\nfixture").decode()
             elif self.path.endswith("/source"):
@@ -226,6 +231,28 @@ def test_input_constraints_fail_before_network():
         client.tap(float("nan"), 1)
     with pytest.raises(AutomationError, match="invalid_swipe_duration"):
         client.swipe((0, 0), (1, 1), 50)
+
+
+def test_hidden_control_is_not_accepted_as_visible_page(appium_server):
+    url, state = appium_server
+    state["displayed"] = False
+    client = AppiumController(url)
+    client.connect("tablet", "test.madeira")
+    with pytest.raises(AutomationError, match="no such element"):
+        client.find("madeira.tab.library", timeout=0)
+    assert not any(c[1].endswith("/click") for c in state["calls"])
+    client.close()
+
+
+def test_developer_smoke_selects_process_frontend_without_settings_changes(appium_server, tmp_path):
+    url, state = appium_server
+    client = AppiumController(url)
+    client.connect("tablet", "test.madeira")
+    report = Run(client, NativeLog(), {"udid": "tablet"}, "test.madeira", tmp_path).smoke("developer")
+    assert report["status"] == "passed"
+    launch = next(c[2] for c in state["calls"] if c[2] and c[2].get("script") == "mobile: launchApp")
+    assert launch["args"][0]["arguments"] == ["-madeiraFrontend", "old"]
+    assert state["orientation"] == "LANDSCAPE"
 
 
 def test_log_export_is_fixed_vocabulary_only():

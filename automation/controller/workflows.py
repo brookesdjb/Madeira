@@ -23,6 +23,7 @@ class Run:
     def __init__(self, device, native, info, bundle_id, path):
         self.device, self.native, self.info = device, native, info
         self.bundle_id, self.path = bundle_id, Path(path)
+        self.restore_orientation = None
         root = Path(__file__).resolve().parents[2]
         try:
             commit = subprocess.check_output(["git", "-C", str(root), "rev-parse", "HEAD"], text=True).strip()
@@ -73,6 +74,11 @@ class Run:
                 self.step("verify_terminated", lambda: self.require_state(1))
             except Exception:
                 self.report["status"] = "failed"
+        if self.restore_orientation:
+            try:
+                self.step("restore_orientation", lambda: self.device.call("POST", "/orientation", {"orientation": self.restore_orientation}))
+            except Exception:
+                self.report["status"] = "failed"
         try:
             self.step("close_session", self.device.close)
         except Exception:
@@ -86,7 +92,15 @@ class Run:
         try:
             if self.device.app_state(self.bundle_id) not in (0, 1):
                 raise AutomationError("smoke_requires_Madeira_stopped_to_preserve_active_games")
-            self.step("launch", lambda: self.device.launch_app(self.bundle_id))
+            if frontend == "developer":
+                # Existing developer tooling is portrait-only; landscape is
+                # the game surface. Restore the owner's orientation at cleanup.
+                self.restore_orientation = self.step("read_orientation", lambda: self.device.call("GET", "/orientation"))
+                self.step("portrait_tooling", lambda: self.device.call("POST", "/orientation", {"orientation": "PORTRAIT"}))
+            # Foundation's argument domain selects this process's UI without
+            # rewriting the user's persistent frontend preference.
+            arguments = ["-madeiraFrontend", "old" if frontend == "developer" else "new"]
+            self.step("launch", lambda: self.device.launch_app(self.bundle_id, arguments))
             launched = True
             self.step("verify_foreground", lambda: self.require_state(4))
             if frontend == "library":

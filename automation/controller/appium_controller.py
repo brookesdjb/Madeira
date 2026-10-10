@@ -104,7 +104,13 @@ class AppiumController:
         while True:
             try:
                 item = self.call("POST", "/element", {"using": "accessibility id", "value": identifier})
-                return item[ELEMENT]
+                element = item[ELEMENT]
+                # XCTest can return controls behind an onboarding sheet. Their
+                # presence is not evidence that the requested page is usable.
+                displayed = self.call("GET", f"/element/{element}/displayed")
+                if displayed in (True, "true", "1", 1):
+                    return element
+                raise AutomationError("no such element")
             except AutomationError as exc:
                 if str(exc) != "no such element" or time.monotonic() >= deadline:
                     raise
