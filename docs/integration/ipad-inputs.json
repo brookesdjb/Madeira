@@ -112,7 +112,11 @@
       "physical": "NOT_INSTALLED_OR_TESTED",
       "wifi": "SUPPORTED_ROUTE_NOT_PHYSICALLY_VERIFIED"
     },
-    "linux_ci": "FIRST_COMBINED_RUN_EXPOSED_HOST_FIXTURES_CORRECTED_RERUN_PENDING"
+    "linux_ci": {
+      "status": "ALL_THREE_JOBS_PASSED",
+      "commit": "581ffb55cdbfb7b37c97670d9e1b048bcd2e0272",
+      "run": "https://github.com/brookesdjb/Madeira/actions/runs/38048086339"
+    }
   },
   "experimental_patches_applied": false,
   "control_status": "OLDER_SOURCE_NOT_MATCHED_TO_NEW_CAPTURE_REPLAY"
