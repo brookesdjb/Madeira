@@ -1,45 +1,30 @@
-# Rise benchmark preparation and current device blocker
+# Rise wake-coalescing benchmark results, 10 October 2026
 
-The focused branch `automation/rise-benchmark-results` at `f4c6666` is merged
-with ancestry into `integration/ipad` at `d0e2abf`. Both are pushed to the fork.
-It adds English Rise menu/result recognition, a bounded result-to-result runner,
-and explicit same-build single-variable comparison support with genuine distinct
-configuration digests. See [the adapter guide](../automation/rise-benchmark.md).
+Ten fresh-process benchmark samples completed on the physical iPad: five with W1 off and five with W1 on. Overall median game-reported FPS increased from 36.55 to 38.14 (+4.35%), but the bootstrap 95% interval is -2.28% to +7.93%. The predefined comparison is **inconclusive**, not a confirmed speedup. Keep W1 opt-in.
 
-Validation: 215 host tests passed, two physical wrappers skipped. The Swift
-reader compiled and recognized the saved 33.85 FPS result (all three scene rows
-matched), recognized the main menu, and rejected gameplay/loading/settings
-screens as completed results. These are saved-screen checks, not a successful
-new end-to-end device benchmark. Independent iteration export and a fresh-process
-AB/BA orchestration wrapper remain to be connected to this adapter.
+| Scene | Off median FPS | On median FPS | Difference | 95% interval |
+| --- | ---: | ---: | ---: | --- |
+| Overall | 36.55 | 38.14 | +4.35% | -2.28% to +7.93% |
+| Mountain Peak | 52.98 | 55.98 | +5.66% | -5.88% to +19.41% |
+| Syria | 23.08 | 22.68 | -1.73% | -9.96% to +7.28% |
+| Geothermal Valley | 31.94 | 32.74 | +2.50% | -3.51% to +5.92% |
 
-All five performance preparation branches (PR20–24) are ancestors of integration.
-W1 and X1 runtime code is already combined; G2 remains staged/unapplied experiment
-preparation. Their draft status and runtime acceptance gates are unchanged.
-No additional performance implementation was enabled, rebuilt or installed today
-in this follow-up. DX12 experiments PR35/37 remain separate from this DX11 trial.
+Every scene comparison is inconclusive at the 3% meaningful-effect threshold. These are exploratory per-scene results; no multiplicity-adjusted significance claim is made.
 
-Physical observation during this follow-up:
+## Conditions and evidence
 
-- Wired iPad detected, Madeira process still alive, JIT ready, owned Rise session.
-- Authenticated paired socket snapshots worked. Experiment state NOT_REQUESTED,
-  requested/process environment both empty. No new switch trial was started.
-- The device reported serious thermal pressure. No timing measurement was taken
-  under that condition and no baseline or speedup is claimed.
-- XCTest repeatedly failed to enable automation mode. This prevented screenshots
-  and UI bootstrap. The alternate read-only screenshotr route was unavailable.
-- The owner was away from the iPad. An authorized normal stop_game request was
-  accepted; the owned game remained running in STOP_REQUESTED for the bounded
-  two-minute observation. It may require an in-game confirmation. No force kill,
-  reinstall, settings change or save deletion was attempted.
+Same installed dirty Debug binary in both arms, with no rebuild or install between them. Its provenance and binary hashes are in [the installed manifest](tomb-raider-transport-2026-10-10.json). Controller code is integration `830169f`, including focused topic `5251828`. 217 host tests passed, two physical wrappers skipped; [all three CI jobs passed](https://github.com/brookesdjb/Madeira/actions/runs/38055415363). This campaign separately supplies physical end-to-end evidence.
 
-When the owner is back, inspect the screen and any normal exit confirmation,
-restore the UI automation connection, and let the device return to nominal/fair.
-Do not repeat stop_game blindly: the process has already recorded STOP_REQUESTED.
-Use normal Madeira save/upload-and-close flow to end the process, then launch
-fresh explicit W1=0/1 arms on the same installed binary, checking actual native
-mode and preserving cpuCount=4, monitor-identity setting, DLL and graphics settings.
-The earlier 34.30 and 33.85 scores remain uncontrolled references, not A/B evidence.
+Order was A B B A A B B A A B. Each sample used a fresh Madeira process and its first benchmark, retained disk caches, a fixed 5-second warmup/10-second menu probe, approximately 10-second screenshots and 1.5-second socket snapshots. The native probe verified actual wake mode; requested and applied environments matched. CPU count 4, 1160x800, the 60 FPS option, monitor-identity setting and all other library-entry fields except lastPlayed matched. All three diagnostic profilers were explicitly disabled in both arms. Graphics were preserved but not re-read from the guest registry each run.
 
-The unrelated local Wine/build-list/DLL/toolchains work remains untouched. No
-upstream submission, tracking-issue closure or branch deletion was performed.
+All thermal observations were nominal. Recorded battery start/end readings ranged from 27.59 to 30.29 C while charging; this is battery temperature, not CPU/GPU temperature. Before fresh launch, the runner waited for battery temperature at or below 30.2 C. Each completed sample ended using the normal upload-saves-and-close flow, with process absence verified.
+
+## Reliability and interpretation
+
+The ten timing outcomes are not a claim of ten uninterrupted automated launches. Two prelaunch interruptions found a preexisting idle app, including one reappearance during cooldown. Order 7 stopped at a Steam Cloud sync prompt; Wait and sync completed, and the same process resumed before its first benchmark. A duplicate recovery input-reservation request was rejected and removed. No timed sample was discarded or replaced. Order 7 consequently had a longer startup; startup duration was not matched. The temporary campaign scripts and private screenshots are retained locally with the raw evidence.
+
+The public [JSON report](rise-w1-results-2026-10-10.json) includes all ten scores, thermal and battery readings, source/configuration digests, comparison thresholds and interruptions. Private raw evidence is under `automation/runs/rise-w1-campaign/20261010T132852.851007Z-a46d8c62`, plus the first two `rise-w1-0/20261010T131551.368595Z-a9a67c2c` and `rise-w1-1/20261010T132107.298633Z-a2f1bd7c` directories.
+
+This measures game-reported benchmark FPS, not verified visible frame cadence. It does not measure the benefit of disabling diagnostics, benchmark CPU/energy use, sustained-session performance, or complete visual correctness. Networking/deadline/stop-under-load acceptance for W1 remains pending. Earlier uncontrolled 34.30/33.85 scores are not used as baselines.
+
+The next useful work is reusable startup recovery plus repeated blocked comparisons with CPU/energy and sustained-session evidence. Do not enable W1 by default or close its acceptance issue on these FPS results alone. No new native performance code, upstream submission, issue closure or branch deletion was performed during this campaign.

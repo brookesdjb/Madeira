@@ -1,0 +1,750 @@
+{
+  "schema_version": 1,
+  "experiment": "MADEIRA_SRV_COALESCE",
+  "rows": [
+    {
+      "order": 0,
+      "mode": 0,
+      "overall_fps": 36.55,
+      "scenes": {
+        "geothermal_valley": {
+          "average_fps": 32.92,
+          "maximum_fps": 44.11,
+          "minimum_fps": 19.57
+        },
+        "mountain_peak": {
+          "average_fps": 49.76,
+          "maximum_fps": 90.9,
+          "minimum_fps": 7.12
+        },
+        "overall_fps": 36.55,
+        "syria": {
+          "average_fps": 25.19,
+          "maximum_fps": 37.28,
+          "minimum_fps": 5.37
+        }
+      },
+      "thermal_states": [
+        "nominal"
+      ],
+      "battery_start_c": 28.69,
+      "battery_end_c": 29.69,
+      "charging_start": true,
+      "charging_end": true
+    },
+    {
+      "order": 1,
+      "mode": 1,
+      "overall_fps": 37.04,
+      "scenes": {
+        "geothermal_valley": {
+          "average_fps": 32.74,
+          "maximum_fps": 45.93,
+          "minimum_fps": 19.01
+        },
+        "mountain_peak": {
+          "average_fps": 53.65,
+          "maximum_fps": 102.24,
+          "minimum_fps": 9.85
+        },
+        "overall_fps": 37.04,
+        "syria": {
+          "average_fps": 22.47,
+          "maximum_fps": 34.8,
+          "minimum_fps": 4.97
+        }
+      },
+      "thermal_states": [
+        "nominal"
+      ],
+      "battery_start_c": 29.19,
+      "battery_end_c": 30.09,
+      "charging_start": true,
+      "charging_end": true
+    },
+    {
+      "order": 2,
+      "mode": 1,
+      "overall_fps": 39.33,
+      "scenes": {
+        "geothermal_valley": {
+          "average_fps": 31.82,
+          "maximum_fps": 45,
+          "minimum_fps": 19.3
+        },
+        "mountain_peak": {
+          "average_fps": 59.1,
+          "maximum_fps": 101.93,
+          "minimum_fps": 7.66
+        },
+        "overall_fps": 39.33,
+        "syria": {
+          "average_fps": 24.76,
+          "maximum_fps": 41.07,
+          "minimum_fps": 6.15
+        }
+      },
+      "thermal_states": [
+        "nominal"
+      ],
+      "battery_start_c": 27.59,
+      "battery_end_c": 29.19,
+      "charging_start": true,
+      "charging_end": true
+    },
+    {
+      "order": 3,
+      "mode": 0,
+      "overall_fps": 35.4,
+      "scenes": {
+        "geothermal_valley": {
+          "average_fps": 32.25,
+          "maximum_fps": 43.13,
+          "minimum_fps": 17.76
+        },
+        "mountain_peak": {
+          "average_fps": 48.97,
+          "maximum_fps": 86.72,
+          "minimum_fps": 12.42
+        },
+        "overall_fps": 35.4,
+        "syria": {
+          "average_fps": 23.08,
+          "maximum_fps": 34.84,
+          "minimum_fps": 3.98
+        }
+      },
+      "thermal_states": [
+        "nominal"
+      ],
+      "battery_start_c": 29.59,
+      "battery_end_c": 30.19,
+      "charging_start": true,
+      "charging_end": true
+    },
+    {
+      "order": 4,
+      "mode": 0,
+      "overall_fps": 36.44,
+      "scenes": {
+        "geothermal_valley": {
+          "average_fps": 30.91,
+          "maximum_fps": 44.06,
+          "minimum_fps": 19.82
+        },
+        "mountain_peak": {
+          "average_fps": 53.57,
+          "maximum_fps": 99.2,
+          "minimum_fps": 17.74
+        },
+        "overall_fps": 36.44,
+        "syria": {
+          "average_fps": 22.74,
+          "maximum_fps": 34.61,
+          "minimum_fps": 4.94
+        }
+      },
+      "thermal_states": [
+        "nominal"
+      ],
+      "battery_start_c": 29.69,
+      "battery_end_c": 30.29,
+      "charging_start": true,
+      "charging_end": true
+    },
+    {
+      "order": 5,
+      "mode": 1,
+      "overall_fps": 38.37,
+      "scenes": {
+        "geothermal_valley": {
+          "average_fps": 30.82,
+          "maximum_fps": 43.88,
+          "minimum_fps": 18.79
+        },
+        "mountain_peak": {
+          "average_fps": 59.42,
+          "maximum_fps": 101.8,
+          "minimum_fps": 10.67
+        },
+        "overall_fps": 38.37,
+        "syria": {
+          "average_fps": 22.46,
+          "maximum_fps": 36.43,
+          "minimum_fps": 5.18
+        }
+      },
+      "thermal_states": [
+        "nominal"
+      ],
+      "battery_start_c": 28.59,
+      "battery_end_c": 29.79,
+      "charging_start": true,
+      "charging_end": true
+    },
+    {
+      "order": 6,
+      "mode": 1,
+      "overall_fps": 37.59,
+      "scenes": {
+        "geothermal_valley": {
+          "average_fps": 33.01,
+          "maximum_fps": 44.06,
+          "minimum_fps": 18.24
+        },
+        "mountain_peak": {
+          "average_fps": 53.57,
+          "maximum_fps": 99.84,
+          "minimum_fps": 10.46
+        },
+        "overall_fps": 37.59,
+        "syria": {
+          "average_fps": 24.1,
+          "maximum_fps": 36.53,
+          "minimum_fps": 5.23
+        }
+      },
+      "thermal_states": [
+        "nominal"
+      ],
+      "battery_start_c": 29.79,
+      "battery_end_c": 30.29,
+      "charging_start": true,
+      "charging_end": true
+    },
+    {
+      "order": 7,
+      "mode": 0,
+      "overall_fps": 39.03,
+      "scenes": {
+        "geothermal_valley": {
+          "average_fps": 31.76,
+          "maximum_fps": 44.8,
+          "minimum_fps": 19.57
+        },
+        "mountain_peak": {
+          "average_fps": 59.48,
+          "maximum_fps": 102.31,
+          "minimum_fps": 18.07
+        },
+        "overall_fps": 39.03,
+        "syria": {
+          "average_fps": 23.34,
+          "maximum_fps": 35.55,
+          "minimum_fps": 5.28
+        }
+      },
+      "thermal_states": [
+        "nominal"
+      ],
+      "battery_start_c": 27.59,
+      "battery_end_c": 29.39,
+      "charging_start": true,
+      "charging_end": true
+    },
+    {
+      "order": 8,
+      "mode": 0,
+      "overall_fps": 36.63,
+      "scenes": {
+        "geothermal_valley": {
+          "average_fps": 31.94,
+          "maximum_fps": 42.09,
+          "minimum_fps": 20.17
+        },
+        "mountain_peak": {
+          "average_fps": 52.98,
+          "maximum_fps": 99.77,
+          "minimum_fps": 14.61
+        },
+        "overall_fps": 36.63,
+        "syria": {
+          "average_fps": 22.86,
+          "maximum_fps": 34.82,
+          "minimum_fps": 4.82
+        }
+      },
+      "thermal_states": [
+        "nominal"
+      ],
+      "battery_start_c": 29.59,
+      "battery_end_c": 30.19,
+      "charging_start": true,
+      "charging_end": true
+    },
+    {
+      "order": 9,
+      "mode": 1,
+      "overall_fps": 38.14,
+      "scenes": {
+        "geothermal_valley": {
+          "average_fps": 33.36,
+          "maximum_fps": 46.19,
+          "minimum_fps": 16.2
+        },
+        "mountain_peak": {
+          "average_fps": 55.98,
+          "maximum_fps": 99.74,
+          "minimum_fps": 12.01
+        },
+        "overall_fps": 38.14,
+        "syria": {
+          "average_fps": 22.68,
+          "maximum_fps": 35.2,
+          "minimum_fps": 4.5
+        }
+      },
+      "thermal_states": [
+        "nominal"
+      ],
+      "battery_start_c": 29.29,
+      "battery_end_c": 30.09,
+      "charging_start": true,
+      "charging_end": true
+    }
+  ],
+  "comparisons": {
+    "overall": {
+      "schema_version": 1,
+      "attribution": "not_established",
+      "note": "Differences can come from device, thermal, cache or scene variation as well as source changes.",
+      "caveats": [
+        "baseline_source_dirty",
+        "candidate_source_dirty",
+        "visual_acceptance_not_established"
+      ],
+      "conditions": {
+        "cache_phase": "disk_warm",
+        "capture_policy": "game_fps_screenshot_10s_socket_1.5s_prior_menu_probe_5s_warm_10s_capture",
+        "device_model": "iPad Pro 11-inch M5",
+        "game": "Rise of the Tomb Raider",
+        "os_version": "26.7",
+        "resolution": "1160x800",
+        "runtime_config_digest": "a2689ef46992cf6008a76c4f3c7c3a574934600d9a00b385d5fa340ec59c8a51",
+        "scene": "built_in_benchmark_overall",
+        "settings_digest": "50cb9ad5275be9bdd3e0641f7c218f5b2ac4856652b1498a8de94a2c008ad6f5"
+      },
+      "experiment": {
+        "name": "MADEIRA_SRV_COALESCE",
+        "baseline": "0",
+        "candidate": "1",
+        "baseline_runtime_digest": "a2689ef46992cf6008a76c4f3c7c3a574934600d9a00b385d5fa340ec59c8a51",
+        "candidate_runtime_digest": "82b8c1c7ab159aec518352cb54b9ac4e5f264f9818e082313e8c249fba248085"
+      },
+      "baseline_source": {
+        "binary_sha256": "80156d4abb5917a1c3fe27d703b8ddd3eac5ea0780344b0c503f7fe8e4716e88",
+        "commit": "c485bb304b15ff6d29b044bd66a77e2f64f34610",
+        "dirty": true
+      },
+      "candidate_source": {
+        "binary_sha256": "80156d4abb5917a1c3fe27d703b8ddd3eac5ea0780344b0c503f7fe8e4716e88",
+        "commit": "c485bb304b15ff6d29b044bd66a77e2f64f34610",
+        "dirty": true
+      },
+      "order": "interleaved",
+      "outcomes": {
+        "baseline": {
+          "iterations": 5,
+          "by_outcome": {
+            "completed": 5,
+            "crashed": 0,
+            "disconnected": 0,
+            "jit_failed": 0,
+            "startup_failed": 0,
+            "timed_out": 0
+          },
+          "visual_review": 0,
+          "visual_inconclusive": 0,
+          "visual_unchecked": 5,
+          "excluded_thermal": 0
+        },
+        "candidate": {
+          "iterations": 5,
+          "by_outcome": {
+            "completed": 5,
+            "crashed": 0,
+            "disconnected": 0,
+            "jit_failed": 0,
+            "startup_failed": 0,
+            "timed_out": 0
+          },
+          "visual_review": 0,
+          "visual_inconclusive": 0,
+          "visual_unchecked": 5,
+          "excluded_thermal": 0
+        }
+      },
+      "metrics": [
+        {
+          "metric": "game_reported_fps",
+          "better": "higher",
+          "baseline_n": 5,
+          "candidate_n": 5,
+          "baseline_median": 36.55,
+          "candidate_median": 38.14,
+          "coefficient_of_variation": {
+            "baseline": 0.036329585436226976,
+            "candidate": 0.022623453724557308
+          },
+          "relative_median_difference": 0.043502051983584256,
+          "bootstrap_95_interval": [
+            -0.022802972072764605,
+            0.0793084522502745
+          ],
+          "verdict": "inconclusive",
+          "reason": "interval_spans_threshold"
+        }
+      ],
+      "status": "inconclusive",
+      "thresholds": {
+        "min_iterations": 5,
+        "min_effect": 0.03,
+        "max_cv": 0.15,
+        "resamples": 2000,
+        "seed": 1
+      }
+    },
+    "mountain_peak": {
+      "schema_version": 1,
+      "attribution": "not_established",
+      "note": "Differences can come from device, thermal, cache or scene variation as well as source changes.",
+      "caveats": [
+        "baseline_source_dirty",
+        "candidate_source_dirty",
+        "visual_acceptance_not_established"
+      ],
+      "conditions": {
+        "cache_phase": "disk_warm",
+        "capture_policy": "game_fps_screenshot_10s_socket_1.5s_prior_menu_probe_5s_warm_10s_capture",
+        "device_model": "iPad Pro 11-inch M5",
+        "game": "Rise of the Tomb Raider",
+        "os_version": "26.7",
+        "resolution": "1160x800",
+        "runtime_config_digest": "a2689ef46992cf6008a76c4f3c7c3a574934600d9a00b385d5fa340ec59c8a51",
+        "scene": "built_in_benchmark_mountain_peak",
+        "settings_digest": "50cb9ad5275be9bdd3e0641f7c218f5b2ac4856652b1498a8de94a2c008ad6f5"
+      },
+      "experiment": {
+        "name": "MADEIRA_SRV_COALESCE",
+        "baseline": "0",
+        "candidate": "1",
+        "baseline_runtime_digest": "a2689ef46992cf6008a76c4f3c7c3a574934600d9a00b385d5fa340ec59c8a51",
+        "candidate_runtime_digest": "82b8c1c7ab159aec518352cb54b9ac4e5f264f9818e082313e8c249fba248085"
+      },
+      "baseline_source": {
+        "binary_sha256": "80156d4abb5917a1c3fe27d703b8ddd3eac5ea0780344b0c503f7fe8e4716e88",
+        "commit": "c485bb304b15ff6d29b044bd66a77e2f64f34610",
+        "dirty": true
+      },
+      "candidate_source": {
+        "binary_sha256": "80156d4abb5917a1c3fe27d703b8ddd3eac5ea0780344b0c503f7fe8e4716e88",
+        "commit": "c485bb304b15ff6d29b044bd66a77e2f64f34610",
+        "dirty": true
+      },
+      "order": "interleaved",
+      "outcomes": {
+        "baseline": {
+          "iterations": 5,
+          "by_outcome": {
+            "completed": 5,
+            "crashed": 0,
+            "disconnected": 0,
+            "jit_failed": 0,
+            "startup_failed": 0,
+            "timed_out": 0
+          },
+          "visual_review": 0,
+          "visual_inconclusive": 0,
+          "visual_unchecked": 5,
+          "excluded_thermal": 0
+        },
+        "candidate": {
+          "iterations": 5,
+          "by_outcome": {
+            "completed": 5,
+            "crashed": 0,
+            "disconnected": 0,
+            "jit_failed": 0,
+            "startup_failed": 0,
+            "timed_out": 0
+          },
+          "visual_review": 0,
+          "visual_inconclusive": 0,
+          "visual_unchecked": 5,
+          "excluded_thermal": 0
+        }
+      },
+      "metrics": [
+        {
+          "metric": "game_reported_fps",
+          "better": "higher",
+          "baseline_n": 5,
+          "candidate_n": 5,
+          "baseline_median": 52.98,
+          "candidate_median": 55.98,
+          "coefficient_of_variation": {
+            "baseline": 0.07845966630038777,
+            "candidate": 0.05031092362856056
+          },
+          "relative_median_difference": 0.05662514156285381,
+          "bootstrap_95_interval": [
+            -0.05884330867518495,
+            0.19413183279742774
+          ],
+          "verdict": "inconclusive",
+          "reason": "interval_spans_threshold"
+        }
+      ],
+      "status": "inconclusive",
+      "thresholds": {
+        "min_iterations": 5,
+        "min_effect": 0.03,
+        "max_cv": 0.15,
+        "resamples": 2000,
+        "seed": 1
+      }
+    },
+    "syria": {
+      "schema_version": 1,
+      "attribution": "not_established",
+      "note": "Differences can come from device, thermal, cache or scene variation as well as source changes.",
+      "caveats": [
+        "baseline_source_dirty",
+        "candidate_source_dirty",
+        "visual_acceptance_not_established"
+      ],
+      "conditions": {
+        "cache_phase": "disk_warm",
+        "capture_policy": "game_fps_screenshot_10s_socket_1.5s_prior_menu_probe_5s_warm_10s_capture",
+        "device_model": "iPad Pro 11-inch M5",
+        "game": "Rise of the Tomb Raider",
+        "os_version": "26.7",
+        "resolution": "1160x800",
+        "runtime_config_digest": "a2689ef46992cf6008a76c4f3c7c3a574934600d9a00b385d5fa340ec59c8a51",
+        "scene": "built_in_benchmark_syria",
+        "settings_digest": "50cb9ad5275be9bdd3e0641f7c218f5b2ac4856652b1498a8de94a2c008ad6f5"
+      },
+      "experiment": {
+        "name": "MADEIRA_SRV_COALESCE",
+        "baseline": "0",
+        "candidate": "1",
+        "baseline_runtime_digest": "a2689ef46992cf6008a76c4f3c7c3a574934600d9a00b385d5fa340ec59c8a51",
+        "candidate_runtime_digest": "82b8c1c7ab159aec518352cb54b9ac4e5f264f9818e082313e8c249fba248085"
+      },
+      "baseline_source": {
+        "binary_sha256": "80156d4abb5917a1c3fe27d703b8ddd3eac5ea0780344b0c503f7fe8e4716e88",
+        "commit": "c485bb304b15ff6d29b044bd66a77e2f64f34610",
+        "dirty": true
+      },
+      "candidate_source": {
+        "binary_sha256": "80156d4abb5917a1c3fe27d703b8ddd3eac5ea0780344b0c503f7fe8e4716e88",
+        "commit": "c485bb304b15ff6d29b044bd66a77e2f64f34610",
+        "dirty": true
+      },
+      "order": "interleaved",
+      "outcomes": {
+        "baseline": {
+          "iterations": 5,
+          "by_outcome": {
+            "completed": 5,
+            "crashed": 0,
+            "disconnected": 0,
+            "jit_failed": 0,
+            "startup_failed": 0,
+            "timed_out": 0
+          },
+          "visual_review": 0,
+          "visual_inconclusive": 0,
+          "visual_unchecked": 5,
+          "excluded_thermal": 0
+        },
+        "candidate": {
+          "iterations": 5,
+          "by_outcome": {
+            "completed": 5,
+            "crashed": 0,
+            "disconnected": 0,
+            "jit_failed": 0,
+            "startup_failed": 0,
+            "timed_out": 0
+          },
+          "visual_review": 0,
+          "visual_inconclusive": 0,
+          "visual_unchecked": 5,
+          "excluded_thermal": 0
+        }
+      },
+      "metrics": [
+        {
+          "metric": "game_reported_fps",
+          "better": "higher",
+          "baseline_n": 5,
+          "candidate_n": 5,
+          "baseline_median": 23.08,
+          "candidate_median": 22.68,
+          "coefficient_of_variation": {
+            "baseline": 0.04281007105447996,
+            "candidate": 0.045787496965062034
+          },
+          "relative_median_difference": -0.017331022530329254,
+          "bootstrap_95_interval": [
+            -0.09964271536323943,
+            0.07279029462738307
+          ],
+          "verdict": "inconclusive",
+          "reason": "interval_spans_threshold"
+        }
+      ],
+      "status": "inconclusive",
+      "thresholds": {
+        "min_iterations": 5,
+        "min_effect": 0.03,
+        "max_cv": 0.15,
+        "resamples": 2000,
+        "seed": 1
+      }
+    },
+    "geothermal_valley": {
+      "schema_version": 1,
+      "attribution": "not_established",
+      "note": "Differences can come from device, thermal, cache or scene variation as well as source changes.",
+      "caveats": [
+        "baseline_source_dirty",
+        "candidate_source_dirty",
+        "visual_acceptance_not_established"
+      ],
+      "conditions": {
+        "cache_phase": "disk_warm",
+        "capture_policy": "game_fps_screenshot_10s_socket_1.5s_prior_menu_probe_5s_warm_10s_capture",
+        "device_model": "iPad Pro 11-inch M5",
+        "game": "Rise of the Tomb Raider",
+        "os_version": "26.7",
+        "resolution": "1160x800",
+        "runtime_config_digest": "a2689ef46992cf6008a76c4f3c7c3a574934600d9a00b385d5fa340ec59c8a51",
+        "scene": "built_in_benchmark_geothermal_valley",
+        "settings_digest": "50cb9ad5275be9bdd3e0641f7c218f5b2ac4856652b1498a8de94a2c008ad6f5"
+      },
+      "experiment": {
+        "name": "MADEIRA_SRV_COALESCE",
+        "baseline": "0",
+        "candidate": "1",
+        "baseline_runtime_digest": "a2689ef46992cf6008a76c4f3c7c3a574934600d9a00b385d5fa340ec59c8a51",
+        "candidate_runtime_digest": "82b8c1c7ab159aec518352cb54b9ac4e5f264f9818e082313e8c249fba248085"
+      },
+      "baseline_source": {
+        "binary_sha256": "80156d4abb5917a1c3fe27d703b8ddd3eac5ea0780344b0c503f7fe8e4716e88",
+        "commit": "c485bb304b15ff6d29b044bd66a77e2f64f34610",
+        "dirty": true
+      },
+      "candidate_source": {
+        "binary_sha256": "80156d4abb5917a1c3fe27d703b8ddd3eac5ea0780344b0c503f7fe8e4716e88",
+        "commit": "c485bb304b15ff6d29b044bd66a77e2f64f34610",
+        "dirty": true
+      },
+      "order": "interleaved",
+      "outcomes": {
+        "baseline": {
+          "iterations": 5,
+          "by_outcome": {
+            "completed": 5,
+            "crashed": 0,
+            "disconnected": 0,
+            "jit_failed": 0,
+            "startup_failed": 0,
+            "timed_out": 0
+          },
+          "visual_review": 0,
+          "visual_inconclusive": 0,
+          "visual_unchecked": 5,
+          "excluded_thermal": 0
+        },
+        "candidate": {
+          "iterations": 5,
+          "by_outcome": {
+            "completed": 5,
+            "crashed": 0,
+            "disconnected": 0,
+            "jit_failed": 0,
+            "startup_failed": 0,
+            "timed_out": 0
+          },
+          "visual_review": 0,
+          "visual_inconclusive": 0,
+          "visual_unchecked": 5,
+          "excluded_thermal": 0
+        }
+      },
+      "metrics": [
+        {
+          "metric": "game_reported_fps",
+          "better": "higher",
+          "baseline_n": 5,
+          "candidate_n": 5,
+          "baseline_median": 31.94,
+          "candidate_median": 32.74,
+          "coefficient_of_variation": {
+            "baseline": 0.022934395217943715,
+            "candidate": 0.03178669450531131
+          },
+          "relative_median_difference": 0.02504696305572951,
+          "bootstrap_95_interval": [
+            -0.035065748278021336,
+            0.059204141054674864
+          ],
+          "verdict": "inconclusive",
+          "reason": "interval_spans_threshold"
+        }
+      ],
+      "status": "inconclusive",
+      "thresholds": {
+        "min_iterations": 5,
+        "min_effect": 0.03,
+        "max_cv": 0.15,
+        "resamples": 2000,
+        "seed": 1
+      }
+    }
+  },
+  "limits": [
+    "Same installed dirty Debug binary throughout; no rebuild or install between arms.",
+    "Settings digest identifies unchanged library entry; game graphics were preserved but not re-read from registry each run.",
+    "Disk caches retained; no independent cold-cache validation.",
+    "No full gameplay visual regression acceptance.",
+    "A preflight attempt stopped before game launch on finding a preexisting idle app; it produced no benchmark sample.",
+    "FPS outcome counts cover completed timed samples only; startup/recovery interruptions are recorded separately below.",
+    "Order 7 waited for Steam Cloud and resumed in the same fresh process before its first benchmark. Startup duration was therefore not matched.",
+    "No benchmark CPU, energy, visible-frame cadence, or sustained-session measurements."
+  ],
+  "interruptions": [
+    {
+      "stage": "initial preflight",
+      "reason": "preexisting idle app; no timed sample"
+    },
+    {
+      "order": 5,
+      "stage": "fresh launch",
+      "reason": "idle app reappeared during cooldown; no timed sample; verified library before close and retry"
+    },
+    {
+      "order": 7,
+      "stage": "launcher",
+      "reason": "Steam Cloud syncing prompt; selected Wait and sync; resumed same process before timed sample"
+    },
+    {
+      "order": 7,
+      "stage": "recovery",
+      "reason": "duplicate reserve_input rejected because game already launched; removed duplicate recovery step; no timed sample"
+    }
+  ],
+  "protocol": {
+    "order": "ABBAABBAAB",
+    "A": "wake coalescing off",
+    "B": "wake coalescing on",
+    "diagnostic_profilers": "threads, XP, stacks all 0",
+    "cpu_count": 4,
+    "fps_mode": "60 FPS",
+    "installed_build_manifest": "tomb-raider-transport-2026-10-10.json",
+    "source_controller_commit": "830169f7fb919b708ed2242da8710ac54f60c9f8",
+    "thresholds": "five samples per arm; 3 percent meaningful effect; 2000 independent median bootstrap resamples, seed 1"
+  }
+}
