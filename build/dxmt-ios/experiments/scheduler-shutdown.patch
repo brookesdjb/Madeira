@@ -1,0 +1,16 @@
+--- a/src/dxmt/dxmt_tasks.hpp
++++ b/src/dxmt/dxmt_tasks.hpp
+@@ -56,7 +56,12 @@
+ }
+ 
+ template <typename Task> task_scheduler<Task>::~task_scheduler() {
+-  destroyed.store(true);
++  // Publish the wait predicate under the same mutex used by waiting workers.
++  // Otherwise notify can occur between predicate evaluation and wait entry.
++  {
++    std::lock_guard<dxmt::mutex> lock(worker_mutex_);
++    destroyed.store(true);
++  }
+   worker_cond_.notify_all();
+ 
+   for (auto &worker : workers_) {
