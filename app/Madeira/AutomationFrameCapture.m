@@ -6,6 +6,7 @@
 #include <sys/resource.h>
 #include <mach/mach.h>
 extern int madeira_automation_frame_hook_available(void) __attribute__((weak_import));
+extern int ios_wineserver_wake_mode(void) __attribute__((weak_import));
 static NSString *captureID;
 static int completed;
 static id backgroundObserver;
@@ -60,8 +61,10 @@ const char *madeira_automation_capture_export(void) {
     uint64_t userStart = timeNS(cpuStart.ru_utime), userEnd = timeNS(cpuEnd.ru_utime);
     uint64_t systemStart = timeNS(cpuStart.ru_stime), systemEnd = timeNS(cpuEnd.ru_stime);
     cpuValid = cpuValid && userEnd >= userStart && systemEnd >= systemStart;
+    int wakeMode = ios_wineserver_wake_mode ? ios_wineserver_wake_mode() : -1;
     NSDictionary *metadata = @{@"schema_version": @1, @"capture_id": captureID,
         @"scope": @"whole_app_process", @"clock": @"clock_monotonic_ns",
+        @"wineserver_wake_mode": wakeMode == 0 || wakeMode == 1 ? @(wakeMode) : NSNull.null,
         @"wall_ns": wallEnd > wallStart ? @(wallEnd - wallStart) : NSNull.null,
         @"user_cpu_ns": cpuValid ? @(userEnd - userStart) : NSNull.null,
         @"system_cpu_ns": cpuValid ? @(systemEnd - systemStart) : NSNull.null,
