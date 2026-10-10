@@ -12,6 +12,7 @@ import os
 import shlex
 import subprocess
 import tempfile
+import sys
 
 root = Path(__file__).resolve().parents[2]
 source = (root / "build/ntdll-unix/server_ios.c").read_text()
@@ -31,6 +32,7 @@ assert init.count("ios_start_task_profilers();") == 1
 assert 'if (!getenv("MADEIRA_QUIET"))' in init
 
 harness = r'''
+#define _POSIX_C_SOURCE 200809L
 #include <assert.h>
 #include <pthread.h>
 #include <stdatomic.h>
@@ -83,7 +85,8 @@ with tempfile.TemporaryDirectory(prefix="madeira-task-profilers-") as tmp:
     c.write_text(harness)
     cc = shlex.split(os.environ.get("CC", "clang"))
     subprocess.run(cc + ["-std=c11", "-fblocks", "-pthread", "-Wall", "-Wextra",
-                         "-Werror", "-fsanitize=address,undefined", str(c), "-o", str(binary)], check=True)
+                         "-Werror", "-fsanitize=address,undefined", str(c), "-o", str(binary)]
+                         + (["-lBlocksRuntime"] if sys.platform == "linux" else []), check=True)
 
     def check(values, wanted, quiet):
         global cases
