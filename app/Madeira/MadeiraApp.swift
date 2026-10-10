@@ -3,6 +3,9 @@ import SwiftUI
 @main
 struct MadeiraApp: App {
     init() {
+#if DEBUG && MADEIRA_AUTOMATION
+        AutomationExperiment.applyStartup(ProcessInfo.processInfo.arguments)
+#endif
         // ml1172: read the screen on the main thread; library entries, whose
         // default Resolution comes from it, are also made on other threads.
         _ = ResolutionChoices.screen

@@ -4768,6 +4768,7 @@ struct MappingPanel: View {
             "wineserver_ready": wineserver_is_ready() != 0,
             "present_count": madeira_get_present_count(),
             "replay_status": AutomationGameplayReplay.shared.status,
+            "experiment": AutomationExperiment.status,
             "thermal_state": DeviceLoadDiagnostics.thermalName(ProcessInfo.processInfo.thermalState),
             "fex_test": fexState,
             "fex_result": result.map { NSNumber(value: $0) as Any } ?? NSNull(),

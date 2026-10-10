@@ -92,3 +92,41 @@ struct AutomationReplayPlan: Decodable {
     }
 }
 #endif
+
+#if DEBUG && MADEIRA_AUTOMATION
+/// LaunchServices may omit custom process environment. Explicit opt-in argv
+/// carries only bounded experiment switches, applied before runtime startup.
+enum AutomationExperiment {
+    private(set) static var requested: [String: String] = [:]
+    private(set) static var state = "NOT_REQUESTED"
+    static func validate(_ text: String) -> [String: String]? {
+        guard text.utf8.count <= 1024, let data = text.data(using: .utf8),
+              let values = try? JSONDecoder().decode([String: String].self, from: data) else { return nil }
+        let switches = Set(["MADEIRA_SRV_COALESCE", "MADEIRA_PROFILE_THREADS", "MADEIRA_PROFILE_XP", "MADEIRA_PROFILE_STACKS", "DXMT_IOS_CACHE_DIR"])
+        guard values.allSatisfy({ key, value in
+            key == "FEX_MAXINST" ? ["500", "1000", "5000"].contains(value) : switches.contains(key) && ["0", "1"].contains(value)
+        }) else { return nil }
+        return values
+    }
+    static func applyStartup(_ arguments: [String]) {
+        guard arguments.contains("--madeira-automation") else { return }
+        let prefix = "--madeira-experiment="
+        let matches = arguments.filter { $0.hasPrefix(prefix) }
+        guard !matches.isEmpty else { return }
+        guard matches.count == 1, let values = validate(String(matches[0].dropFirst(prefix.count))) else { state = "INVALID"; return }
+        requested = values
+        state = values.allSatisfy { setenv($0.key, $0.value, 1) == 0 } ? "APPLIED" : "FAILED"
+    }
+    static var status: [String: Any] {
+        var actual: [String: Any] = [:]
+        for key in requested.keys {
+            if let p = getenv(key) {
+                let value = String(cString: p)
+                let valid = key == "FEX_MAXINST" ? ["500", "1000", "5000"].contains(value) : ["0", "1"].contains(value)
+                actual[key] = valid ? value : "UNEXPECTED"
+            } else { actual[key] = NSNull() }
+        }
+        return ["state": state, "requested": requested, "process_environment": actual]
+    }
+}
+#endif
