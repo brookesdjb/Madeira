@@ -1,5 +1,6 @@
 """Run as python -m automation.controller.cli from the repository root."""
 import argparse
+from contextlib import ExitStack
 import json
 import os
 from pathlib import Path
@@ -22,6 +23,8 @@ def parser():
     p.add_argument("--wda-bundle", default=os.getenv("MADEIRA_WDA_BUNDLE_ID"))
     p.add_argument("--transport", choices=["wired", "localNetwork"],
                    default=os.getenv("MADEIRA_DEVICE_TRANSPORT", "wired"))
+    p.add_argument("--command-transport", choices=["socket", "xctest"], default="socket",
+                   help="Command/status transport for game-command and benchmark-capture")
     p.add_argument("--server", default="http://127.0.0.1:4723")
     p.add_argument("--output", default=str(ROOT / "automation/runs"))
     sub = p.add_subparsers(dest="command", required=True)
@@ -133,8 +136,21 @@ def main(argv=None):
             workflow = Run(device, native, info, args.bundle_id, path)
             workflow.report["reservation"] = lease
             connection_started = time.time()
+            transports = ExitStack()
             try:
-                workflow.step("connect", lambda: device.connect(info["udid"], args.bundle_id, args.team, args.wda_bundle))
+                socket_run = args.command in {"game-command", "benchmark-capture"} and args.command_transport == "socket"
+                # Socket-only waits do not refresh Appium's session timer. Allow
+                # the bounded 900s warmup + 900s capture and export margin.
+                workflow.step("connect", lambda: device.connect(info["udid"], args.bundle_id, args.team, args.wda_bundle,
+                    idle_timeout=2100 if socket_run else 180))
+                if args.command in {"game-command", "benchmark-capture"} and args.command_transport == "socket":
+                    from .transport import attach_transport
+                    pids = native.app_process_ids(info["udid"], args.bundle_id)
+                    if len(pids) != 1:
+                        raise AutomationError("transport_requires_one_existing_process")
+                    transports.enter_context(attach_transport(device, native, info["udid"], args.bundle_id, pids[0],
+                        route="wifi" if args.transport == "localNetwork" else "usb"))
+                    workflow.report["command_transport"] = "paired_socket"
                 if args.command == "smoke":
                     result = workflow.smoke(args.frontend)
                 elif args.command == "jit-test":
@@ -182,6 +198,8 @@ def main(argv=None):
                     workflow.report["evidence"]["wda_startup"] = wda_startup_evidence(connection_started)
                     result = workflow.report
                     save_json(path / "report.json", result)
+            finally:
+                transports.close()
             print(json.dumps({"status": result["status"], "report": str(path / "report.json"),
                               "steps": result["steps"]}))
             return 0 if result["status"] == "passed" else 1

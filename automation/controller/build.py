@@ -25,6 +25,7 @@ def inspect_app(app, automation, signed):
     game_surface = any(b"madeira.automation.command" in b for b in contents)
     presentation_anchor = any(b"winios_automation_set_presentation_window" in b for b in contents)
     frame_capture = any(b"madeira.automation.frame-capture" in b for b in contents)
+    socket_transport = any(b"automation-transport.private.json" in b for b in contents)
     # Check actual compiled app binaries, not just source #if declarations.
     if probe != automation:
         raise AutomationError("compiled_automation_surface_mismatch")
@@ -36,13 +37,15 @@ def inspect_app(app, automation, signed):
         raise AutomationError("compiled_automation_presentation_anchor_mismatch")
     if frame_capture != automation:
         raise AutomationError("compiled_frame_capture_mismatch")
+    if socket_transport != automation:
+        raise AutomationError("compiled_automation_transport_mismatch")
     if signed:
         verified = subprocess.run(["codesign", "--verify", "--deep", "--strict", str(app)],
                                   capture_output=True)
         if verified.returncode:
             raise AutomationError("app_signature_verification_failed")
     return {"bundle_id": info["CFBundleIdentifier"], "automation_surface": probe, "automation_native_fixture": native_fixture, "automation_game_surface": game_surface, "automation_presentation_anchor": presentation_anchor,
-            "signature_verified": signed,
+            "automation_socket_transport": socket_transport, "signature_verified": signed,
             "binary_sha256": {p.name: hashlib.sha256(b).hexdigest() for p, b in zip(binaries, contents)}}
 
 

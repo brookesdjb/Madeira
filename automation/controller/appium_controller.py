@@ -53,11 +53,13 @@ class AppiumController:
             raise AutomationError("webdriver_error")
         return value
 
-    def connect(self, udid, bundle_id, team=None, wda_bundle=None):
+    def connect(self, udid, bundle_id, team=None, wda_bundle=None, *, idle_timeout=180):
+        if type(idle_timeout) is not int or not 1 <= idle_timeout <= 3600:
+            raise AutomationError("invalid_appium_idle_timeout")
         caps = {"platformName": "iOS", "appium:automationName": "XCUITest", "appium:udid": udid,
                 "appium:bundleId": bundle_id, "appium:noReset": True, "appium:fullReset": False,
                 "appium:autoLaunch": False, "appium:shouldTerminateApp": False,
-                "appium:useNewWDA": False, "appium:newCommandTimeout": 180,
+                "appium:useNewWDA": False, "appium:newCommandTimeout": idle_timeout,
                 "appium:waitForIdleTimeout": 1, "appium:showXcodeLog": False,
                 "appium:printPageSourceOnFindFailure": False,
                 "appium:derivedDataPath": str(Path(__file__).resolve().parents[1] / "derived-data/wda"),
@@ -84,6 +86,11 @@ class AppiumController:
         if self.session:
             try:
                 self.call("DELETE", "")
+            except AutomationError as exc:
+                # Expiry already deleted the server session; cleanup must not
+                # mask the original failure or attempt to relaunch the app.
+                if str(exc) != "invalid session id":
+                    raise
             finally:
                 self.session = None
 

@@ -30,7 +30,7 @@ def capture(workflow, plan, warmup=60, seconds=180, *, clock=time.monotonic, pau
             pause(2)
             if workflow.device.app_state(workflow.bundle_id) != 4:
                 raise AutomationError('benchmark_foreground_lost')
-            state = snapshot(workflow.device)  # Refresh button is the explicit heartbeat.
+            state = snapshot(workflow.device)  # Transport snapshot (or legacy Refresh) is the heartbeat.
             if state.get('pid') != pid or not state.get('wine_running'):
                 raise AutomationError('benchmark_process_changed')
             replay = state.get('replay_status', {})
@@ -56,7 +56,8 @@ def capture(workflow, plan, warmup=60, seconds=180, *, clock=time.monotonic, pau
             '--source','Documents/automation-capture-metadata.json','--destination',str(metadata_path)],120)
         metadata_path.chmod(0o600)
         metadata=load_metadata(metadata_path,metrics['capture_id'])
-        result={'schema_version':1, 'scope':'present_submission', 'warmup_seconds':warmup,
+        result={'schema_version':1, 'scope':'present_submission',
+                'command_transport':'paired_socket' if getattr(workflow.device, 'command_transport', None) is not None else 'xctest', 'warmup_seconds':warmup,
                 'requested_measure_seconds':seconds, 'replay':replay, 'observations':observations,
                 'metrics':metrics, 'scene_readiness':'NOT_ESTABLISHED_BY_CAPTURE',
                 'process_capture':metadata, 'cpu_gpu_attribution':'PER_ROLE_AND_GPU_NOT_AVAILABLE', 'status':'captured'}

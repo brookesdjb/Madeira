@@ -1,4 +1,4 @@
-"""Correlated XCTest commands. Acknowledged launch/stop is never game readiness/exit."""
+"""Correlated transport commands with an explicit legacy XCTest fallback. Acknowledged launch/stop is never game readiness/exit."""
 import json
 import re
 import time
@@ -37,6 +37,9 @@ def command(device, operation, *, library_id=None, steam_app_id=None, request_id
         raise AutomationError("unexpected_benchmark_window")
     if len(json.dumps(request, separators=(",", ":")).encode()) > 4096:
         raise AutomationError("replay_request_too_large")
+    transport = getattr(device, "command_transport", None)
+    if transport is not None:
+        return transport.command(request, timeout=reply_timeout)
     element = device.find("madeira.automation.command")
     device.call("POST", f"/element/{element}/clear", {})
     device.text("madeira.automation.command", json.dumps(request, separators=(",", ":")))
