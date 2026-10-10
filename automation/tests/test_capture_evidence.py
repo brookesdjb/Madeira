@@ -141,3 +141,21 @@ def test_tampered_capture_and_manifest_rejected(tmp_path):
     cand.write_text('{"schema_version": 1, "schema_version": 1}')
     with pytest.raises(AutomationError, match="invalid_capture_manifest"):
         c.load_manifest(cand)
+
+
+def test_reopening_run_preserves_existing_manifest_and_images(tmp_path):
+    folder = tmp_path / "run"
+    first = log(folder)
+    first.record("on_demand", "menu", scene())
+    original = {p.name: p.read_bytes() for p in folder.iterdir()}
+    with pytest.raises(AutomationError, match="manifest_exists"):
+        log(folder)
+    assert original == {p.name: p.read_bytes() for p in folder.iterdir()}
+
+
+def test_different_capture_policies_cannot_pass_visual_gate(tmp_path):
+    base, cand = baseline_and_candidate(tmp_path, scene(hud="black"))
+    manifest = json.loads(cand.read_text())
+    manifest["run"]["capture_policy"] = "timing_baseline"
+    cand.write_text(json.dumps(manifest))
+    assert c.compare_captures(base, cand, tmp_path / "out", calibration(tmp_path))["status"] == "inconclusive"

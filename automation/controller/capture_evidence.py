@@ -7,6 +7,7 @@ import os
 from pathlib import Path
 import re
 import time
+import tempfile
 
 from PIL import Image
 from .device import AutomationError
@@ -67,6 +68,13 @@ class CaptureLog:
         self.periodic_interval_ns = int(periodic_interval_s * 1e9)
         self.private = {_label(c, "invalid_private_checkpoint") for c in private_checkpoints}
         self.entries, self.used_bytes, self.last_periodic = [], 0, None
+        # Claim the manifest exclusively before writing; reusing a run must
+        # never erase previously collected evidence, even via a second writer.
+        try:
+            with (self.path / MANIFEST).open('xb') as claim:
+                os.fchmod(claim.fileno(), 0o600)
+        except FileExistsError:
+            raise AutomationError("capture_manifest_exists") from None
         self._save()
 
     def record(self, kind, checkpoint, capture):
@@ -118,12 +126,20 @@ class CaptureLog:
         return entry
 
     def _save(self):
-        temporary = self.path / (MANIFEST + ".tmp")
-        save_json(temporary, {"schema_version": 1, "run": self.run, "limits": {
+        value = {"schema_version": 1, "run": self.run, "limits": {
             "max_captures": self.max_captures, "max_bytes": self.max_bytes,
             "periodic_interval_ns": self.periodic_interval_ns},
-            "private_checkpoints": sorted(self.private), "captures": self.entries})
-        os.replace(temporary, self.path / MANIFEST)
+            "private_checkpoints": sorted(self.private), "captures": self.entries}
+        # A unique private temporary avoids overwriting an earlier .tmp file.
+        with tempfile.NamedTemporaryFile(mode='w', dir=self.path, prefix='.captures-', delete=False) as target:
+            temporary = Path(target.name)
+            try:
+                json.dump(value, target, indent=2)
+                target.flush()
+                os.replace(temporary, self.path / MANIFEST)
+            finally:
+                temporary.unlink(missing_ok=True)
+
 
 
 def load_manifest(path):
@@ -218,7 +234,8 @@ def compare_captures(baseline_manifest, candidate_manifest, output, calibration=
         overall = "inconclusive"
     elif "review" in statuses:
         overall = "review"
-    elif "inconclusive" in statuses or not all(r.get("calibrated") for r in results):
+    elif (base["run"]["capture_policy"] != cand["run"]["capture_policy"]
+          or "inconclusive" in statuses or not all(r.get("calibrated") for r in results)):
         # Uncalibrated thresholds are a hint, not a rendering gate.
         overall = "inconclusive"
     else:
