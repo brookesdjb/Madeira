@@ -70,6 +70,9 @@ the system keyboard before tapping Send. Normal builds omit
 this overlay and its hit-test branch. The host waits up to 15 seconds for the
 matching reply across screen transitions. It never resends a request after
 Send; an unavailable reply reports that the request may already have run.
+Dispatch restores the normal app's key window before calling the launch path.
+Otherwise Winios would attach its compositor to the command editor's window
+and cover the controls with the guest desktop.
 
 ```json
 {"schema_version":2,"request_id":"launch-001","operation":"launch_game","steam_app_id":400}
@@ -112,6 +115,7 @@ Example for an already running opted-in foreground app:
 python -m automation.controller.cli game-command list_installed_games
 python -m automation.controller.cli game-command launch_game --steam-app-id 400
 python -m automation.controller.cli game-command get_game_status
+python -m automation.controller.cli game-checkpoint --seconds 120
 python -m automation.controller.cli game-command stop_game --steam-app-id 400
 ```
 
@@ -121,3 +125,24 @@ acceptance remains pending; Portal on the iPad's internal storage is now the
 selected first game, replacing the earlier SSD-dependent Borderlands proposal.
 See [physical game validation](game-validation.md) for the current separation
 between normal-app game observations and command API acceptance.
+
+### Portal menu checkpoint
+
+The host `game-checkpoint` command observes the English Portal: The First Slice
+menu for the uniquely configured Steam App ID 400. It requires an owned active
+session with the normal startup UI finished, matching reply/snapshot PID, and
+two consecutive fresh screenshots of the same process. Local macOS Vision must
+recognize the title and New Game, Options and Quit labels; menu labels must be
+on the left below the title. Recognition requires confidence 0.8. The title
+allows one same-length character substitution because Vision reads the large
+blurred First as Hirst on this package. Arbitrary recognized text is discarded.
+The Source splash and desktop cannot satisfy those conditions.
+
+Success reports `MENU_OBSERVED`, observation time, PID, library identifier,
+matched fixed labels and screenshot SHA-256. This host result does not change
+the app's `NOT_VERIFIED` readiness or assert gameplay/benchmark readiness.
+Timeout preserves the running game and reports a fixed failure code. The
+default deadline is 120 seconds, with a final in-flight XCTest/OCR call bounded
+by its own transport timeout. The CLI never launches or terminates the app.
+Localized menus, overlays obscuring the menu, and other games need separate
+checkpoints; no elapsed-time/frame-counter fallback is used.

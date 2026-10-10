@@ -46,6 +46,8 @@ def parser():
     game.add_argument("--library-id")
     game.add_argument("--steam-app-id", type=int)
     game.add_argument("--request-id")
+    checkpoint = sub.add_parser("game-checkpoint", help="Observe the owned Portal menu; never launch or stop a game")
+    checkpoint.add_argument("--seconds", type=int, default=120)
     sub.add_parser("jit-test")
     visual = sub.add_parser("compare-images")
     visual.add_argument("baseline")
@@ -126,6 +128,13 @@ def main(argv=None):
                 elif args.command == "jit-test":
                     from .jit_probe import probe
                     result = probe(workflow)
+                elif args.command == "game-checkpoint":
+                    from .checkpoints import wait_for_portal_menu
+                    workflow.require_state(4)
+                    workflow.report["game_checkpoint"] = workflow.step("portal_menu_checkpoint",
+                        lambda: wait_for_portal_menu(device, path, seconds=args.seconds))
+                    workflow.report["status"] = "passed"
+                    result = workflow.finish(terminate=False)
                 elif args.command == "game-command":
                     from .game_control import command
                     workflow.require_state(4)
