@@ -5,7 +5,7 @@
 The controller's HTTP protocol and failure handling are tested with a fake
 Appium server. Mac compilation/signing and binary guard checks are now verified;
 see [Mac validation](mac-validation.md). Physical UI smoke now passes on the provisioned M5 iPad; standalone built-in JIT/exit-42 coexistence
-is observed, with repetition and normal-game acceptance still pending. Run the following on your Mac. First provisioning,
+passes in two consecutive runs; normal-game acceptance remains pending. Run the following on your Mac. First provisioning,
 onboarding and any OS trust prompts require a person. The controller does not
 accept those prompts, change accounts, erase data or install certificates.
 
@@ -222,6 +222,7 @@ These run the same CLI workflows and require a running Appium server. Ordinary
 
 The standalone JIT probe uses native devicectl launch/termination with exact
 main-app PID checks and WDA for status/buttons/screenshots. Its launch variant
-is awaiting repeated hardware validation after Auto-Lock; see jit-compatibility.md.
+passes repeated hardware validation; see jit-compatibility.md. Auto-Lock still
+requires owner unlock before another run.
 The native exit-42 fixture is compiled only into opted-in Debug, with the same
 ELF loader as the normal exit-0 Hello World test.

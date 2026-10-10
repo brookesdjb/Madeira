@@ -2,8 +2,9 @@
 
 **Result: built-in JIT + responsive WDA + x86 exit 42 observed on the M5 iPad.**
 The standalone probe also observed a new PID and successful JIT reactivation after
-restart. Repeat cleanup and the final native-launch variant await an unlocked device. This is not normal-game or
-post-detach compatibility; those matrix rows remain untested.
+restart. Two consecutive runs of the final native-launch/cleanup variant pass,
+followed by a normal UI smoke pass. This is not normal-game or post-detach
+compatibility; those matrix rows remain untested.
 
 ## Established by source inspection
 
@@ -74,7 +75,7 @@ iPad model/OS, transport, signing method and Madeira commit alongside report.jso
 | WDA + StikDebug | Same, including successful foreground return | NOT DETECTED by app; no attempt |
 | Debugger attach impact | Appium latency/responsiveness during attach | Fresh status/screenshot control observed with debugger attached; host round trips recorded |
 | Debugger detach survival | Normal launch's detach then successful guest execution/input | NOT RUN; standalone FEX probe does not claim this |
-| App restart | New PID, readiness recheck, successful reactivation | OBSERVED: new PID, initially not ready, built-in reactivation; repeated cleanup under validation |
+| App restart | New PID, readiness recheck, successful reactivation | OBSERVED: new PID, initially not ready, built-in reactivation; two consecutive native launch/cleanup passes |
 | VPN already connected | Native JIT succeeds without network change | OBSERVED: existing connected LocalDevVPN path; no Shortcut configured in separate app |
 | Shortcut connect/restore | User-configured Shortcut completes without permission dialogs, expected network restored | NOT RUN |
 | Install/reinstall | Existing data preserved; any trust dialogs recorded | Owned fixture preserved in A1; pairing migrated into separate app Keychain and survived reinstall |
@@ -127,7 +128,8 @@ clearing XCTest's process registration after the native stop. A later launch
 failed with iPadOS CoreDevice `Locked`, confirmed by a black screenshot and
 `passcodeRequired=true` (despite `unlockedSinceBoot=true`). This does not
 establish a stale XCTest launch-cache fault. The final native launch variant
-is host-tested and awaits physical repetition after owner unlock. It records
+was then host-tested and awaiting owner unlock; its subsequent acceptance is
+recorded below. It records
 the fresh PID directly and compares it with the probe snapshot before JIT.
 All physical CLI mutations now check the current unlock gate under reservation
 and return `device_locked_requires_owner_unlock` before creating a session.
@@ -146,6 +148,39 @@ Normal-game detach survival, guest execution after that detach, configured
 Shortcut connect/restore and StikDebug remain unverified. This probe does not
 claim game readiness, rendering, virtual input or benchmark compatibility.
 
-Host validation: 61 tests pass, 2 physical pytest wrappers skip. The direct
+Host validation: 62 tests pass, 2 physical pytest wrappers skip. The direct
 physical results above are separate from that count. No passcode is accepted,
 stored or injected; owner unlock remains an explicit device prerequisite.
+
+## Consecutive acceptance after watchdog lifetime fix
+
+The unlocked native-launch run `20261010T070810.167659Z-3c8b1fde` reached
+attached JIT and logged guest exit 42, then the main app terminated before its
+next status read. Cleanup succeeded. No attributable fresh crash report was
+found, so the exit cause remains unconfirmed. Source inspection found an
+existing detached test-watchdog thread capturing a stack atomic and reading a
+Thread that the test destroys. The app bridge now signals and joins that
+watchdog before destroying its state. This corrects its lifetime independently
+of whether it caused the observed exit; the FEX submodule is unchanged. A
+termination racing a status refresh now reports a terminated process rather
+than a generic missing UI element.
+
+At clean source `3216acc6d1d0e3e4fb6c7d8aabdf2886b99fef5c`, both
+`20261010T071110.833633Z-616a4f3c` and
+`20261010T071204.974062Z-135aa9da` passed every step consecutively without human
+preparation between them. Each observed built-in JIT, a live debugger, FEX
+PASSED/42, a new PID, initially absent JIT readiness after restart, successful
+reactivation and confirmed native cleanup. The following normal library smoke
+`20261010T071245.940352Z-1255175e` also passed. The six attached-debugger UI
+refresh round trips ranged from 751.59 to 1898.39 ms; these are host command
+round trips, not game metrics.
+
+All three signed variants at this clean commit pass strict signature and
+compiled-surface checks. The latest installed automation executable SHA-256 is
+`2fa02cdcee1bb182e274092b5e08d280360aef717fe5636c704878eb18e8f658`,
+and its Debug dylib SHA-256 is
+`c2a3202428b8e4188c8bdf7db4f612a0c2bdce615d68560e091c7955dbe4e303`.
+The normal Debug and Release binaries exclude both the probe identifier and
+native automation fixture. Existing normal SSD app/data remain untouched.
+Borderlands GOTY on the SSD is the owner-selected next game for lifecycle/input
+acceptance; no full-game result is claimed by these standalone runs.
