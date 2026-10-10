@@ -7,6 +7,7 @@ import sys
 from .appium_controller import AppiumController
 from .device import AutomationError, DeviceControl, doctor, run
 from .workflows import Run, new_run, save_json
+from .reservation import reserve_device
 
 DEFAULT_BUNDLE = "com.willfaust.madeora"
 ROOT = Path(__file__).resolve().parents[2]
@@ -103,40 +104,42 @@ def main(argv=None):
         if args.command == "device-check":
             print(json.dumps({"status": "connected", "device": info}))
             return 0
-        if args.command == "install":
-            print(json.dumps(native.install_app(info["udid"], args.app, args.bundle_id)))
-            return 0
-        path = new_run(args.output)
-        device = AppiumController(args.server)
-        workflow = Run(device, native, info, args.bundle_id, path)
-        try:
-            workflow.step("connect", lambda: device.connect(info["udid"], args.bundle_id, args.team, args.wda_bundle))
-            if args.command == "smoke":
-                result = workflow.smoke(args.frontend)
-            elif args.command == "jit-test":
-                from .jit_probe import probe
-                result = probe(workflow)
-            else:
-                try:
-                    execute_actions(workflow, json.loads(Path(args.file).read_text()))
-                    workflow.report["status"] = "passed"
-                except Exception:
-                    workflow.report["status"] = "failed"
-                    raise
-                finally:
+        with reserve_device(info["udid"], "cli:" + args.command) as lease:
+            if args.command == "install":
+                print(json.dumps(native.install_app(info["udid"], args.app, args.bundle_id)))
+                return 0
+            path = new_run(args.output)
+            device = AppiumController(args.server)
+            workflow = Run(device, native, info, args.bundle_id, path)
+            workflow.report["reservation"] = lease
+            try:
+                workflow.step("connect", lambda: device.connect(info["udid"], args.bundle_id, args.team, args.wda_bundle))
+                if args.command == "smoke":
+                    result = workflow.smoke(args.frontend)
+                elif args.command == "jit-test":
+                    from .jit_probe import probe
+                    result = probe(workflow)
+                else:
+                    try:
+                        execute_actions(workflow, json.loads(Path(args.file).read_text()))
+                        workflow.report["status"] = "passed"
+                    except Exception:
+                        workflow.report["status"] = "failed"
+                        raise
+                    finally:
+                        result = workflow.finish(terminate=False)
+            except Exception as exc:
+                workflow.report["status"] = "failed"
+                workflow.report["error"] = str(exc) if isinstance(exc, AutomationError) else type(exc).__name__
+                # A session may not exist, so don't try a second install or guessed device.
+                if device.session:
                     result = workflow.finish(terminate=False)
-        except Exception as exc:
-            workflow.report["status"] = "failed"
-            workflow.report["error"] = str(exc) if isinstance(exc, AutomationError) else type(exc).__name__
-            # A session may not exist, so don't try a second install or guessed device.
-            if device.session:
-                result = workflow.finish(terminate=False)
-            else:
-                result = workflow.report
-                save_json(path / "report.json", result)
-        print(json.dumps({"status": result["status"], "report": str(path / "report.json"),
-                          "steps": result["steps"]}))
-        return 0 if result["status"] == "passed" else 1
+                else:
+                    result = workflow.report
+                    save_json(path / "report.json", result)
+            print(json.dumps({"status": result["status"], "report": str(path / "report.json"),
+                              "steps": result["steps"]}))
+            return 0 if result["status"] == "passed" else 1
     except (AutomationError, OSError, ValueError) as exc:
         error = str(exc) if isinstance(exc, AutomationError) else type(exc).__name__
         print(json.dumps({"status": "blocked", "error": error}))

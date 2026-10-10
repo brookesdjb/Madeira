@@ -68,6 +68,11 @@ build (do not uninstall an existing app, which would erase its data).
 
 ## First end-to-end proof
 
+All physical CLI commands use the [shared device reservation](device-reservation.md)
+before installation or Appium connection. Competing worktrees fail immediately
+instead of taking the device from a live run. Performance tools must use the same
+reservation; see issue #2. Do not delete its persistent lock files.
+
 In one terminal:
 
 ```sh
