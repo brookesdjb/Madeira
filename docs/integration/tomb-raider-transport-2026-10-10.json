@@ -1,0 +1,152 @@
+{
+  "schema_version": 1,
+  "game": "Rise of the Tomb Raider",
+  "steam_app_id": 391220,
+  "device_model": "iPad Pro 11-inch M5",
+  "os_version": "26.7",
+  "transport": "paired_usb_socket",
+  "reference_run": {
+    "schema_version": 1,
+    "game": "Rise of the Tomb Raider",
+    "type": "manually_started_reference",
+    "measurement": "game_reported_benchmark_fps",
+    "overall_fps": 34.3,
+    "scenes": {
+      "Mountain Peak": {
+        "average": 46.52,
+        "min": 6.44,
+        "max": 76.2
+      },
+      "Syria": {
+        "average": 23.81,
+        "min": 5.32,
+        "max": 37.01
+      },
+      "Geothermal Valley": {
+        "average": 30.87,
+        "min": 21.57,
+        "max": 40.77
+      }
+    },
+    "result_screenshot": "benchmark-progress-3.png",
+    "build_identity": "unverified",
+    "graphics_settings": {
+      "resolution": [
+        1160,
+        800
+      ],
+      "preset": "high",
+      "dx12": false,
+      "fullscreen": true,
+      "exclusive_fullscreen": false,
+      "refresh_hz": 60,
+      "anti_aliasing": "FXAA",
+      "vsync": "double_buffered",
+      "anisotropic_filter": "4x",
+      "texture_quality": "high",
+      "shadow_quality": "high",
+      "level_of_detail": "high",
+      "dynamic_foliage": "medium",
+      "tessellation": true,
+      "screen_space_reflections": true,
+      "motion_blur": true,
+      "resolution_modifier": "slider_at_minimum_no_numeric_value_shown"
+    },
+    "optimization_acceptance": false,
+    "caveats": [
+      "manually_started",
+      "screenshot_observations_during_run",
+      "single_run",
+      "no_native_telemetry",
+      "not_a_controlled_baseline"
+    ],
+    "per_game_workarounds": {
+      "cpuCount": 4,
+      "DXMT_WSI_MONITOR_IDENTITY": 1,
+      "faultrep_dll_added": true
+    }
+  },
+  "preservation": {
+    "library_json_exact_match": true,
+    "faultrep_dll_exact_match": true,
+    "same_bundle_install_without_uninstall": true
+  },
+  "installed_app": {
+    "source_commit": "c485bb304b15ff6d29b044bd66a77e2f64f34610",
+    "source_dirty": true,
+    "note": "Prepared transport build from before source commit; binaries verified against original build report. Does not represent current integration HEAD.",
+    "binary_sha256": {
+      "Madeira": "75c9a0a242575135e02e1031a8d65505e25f563ba09480a459d56dc3178b355e",
+      "Madeira.debug.dylib": "80156d4abb5917a1c3fe27d703b8ddd3eac5ea0780344b0c503f7fe8e4716e88"
+    },
+    "build_report": "20261010T110635.467945Z-7bd3d906"
+  },
+  "physical_checks": {
+    "authenticated_snapshot": true,
+    "jit_and_debugger": true,
+    "api_game_launch": true,
+    "keyboard_replay": true,
+    "menu_present_trace": {
+      "complete": true,
+      "dropped_samples": 0,
+      "samples": 599,
+      "seconds": 10,
+      "p95_submission_interval_ms": 16.795
+    },
+    "disconnect_replay_stop": "TRANSPORT_DISCONNECTED after closing a connection during a neutral replay; game stayed running",
+    "wifi": "untested",
+    "independent_held_key_release": "untested",
+    "appium_socket_only_idle": {
+      "idle_seconds": 186.69079070806038,
+      "appium_idle_budget_seconds": 2100,
+      "same_native_pid": true,
+      "appium_screenshot_succeeded": true,
+      "game_preserved": true
+    },
+    "session_cleanup": "Appium and socket closed; shared lease released; game result screen preserved"
+  },
+  "acceptance": {
+    "optimization_speedup": false,
+    "controlled_baseline": false,
+    "notes": [
+      "Menu trace proves hook delivery, not benchmark performance.",
+      "Benchmark scene readiness reviewed manually.",
+      "No full repeated A/B campaign or observer-overhead acceptance."
+    ]
+  },
+  "socket_started_benchmark": {
+    "measurement": "game_reported_benchmark_fps",
+    "overall_fps": 33.85,
+    "scenes": {
+      "Mountain Peak": {
+        "average": 48.85,
+        "min": 7.13,
+        "max": 81.06
+      },
+      "Syria": {
+        "average": 23.08,
+        "min": 5.54,
+        "max": 34.14
+      },
+      "Geothermal Valley": {
+        "average": 27.99,
+        "min": 13.94,
+        "max": 38.78
+      }
+    },
+    "result_screenshot": "socket-benchmark-result.png",
+    "caveats": [
+      "Appium UI session expired during socket-only waiting; fresh read-only session retrieved completed result.",
+      "Not a paired optimization comparison; do not attribute difference from manual reference to transport."
+    ]
+  },
+  "host_validation": {
+    "automation_tests_passed": 208,
+    "device_wrappers_skipped": 2,
+    "linux_ci": {
+      "status": "ALL_THREE_JOBS_PASSED",
+      "commit": "1270a4b04301241188736b7e892438233eaf1eee",
+      "run": "https://github.com/brookesdjb/Madeira/actions/runs/38050402660"
+    }
+  }
+}

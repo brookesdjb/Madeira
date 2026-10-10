@@ -92,7 +92,7 @@
   "control_branch": "integration/ipad-control",
   "control_commit": "5cf22968d75a2081adf9b6d8c2c6e7d25f023c7f",
   "validation": {
-    "harness_host": "202 passed, 2 device wrappers skipped",
+    "harness_host": "208 passed, 2 device wrappers skipped",
     "swift_ios": "66 production sources, normal Debug and opted-in automation type-check passed",
     "native_ios": "changed ntdll and wineserver sources compile as arm64 objects",
     "affected_host_checks": [
@@ -114,13 +114,21 @@
     "command_transport": {
       "host": "ACTUAL_SWIFT_LISTENER_TESTED_ON_MACOS",
       "signed_builds": "AUTOMATION_DEBUG_NORMAL_DEBUG_RELEASE_PASSED",
-      "physical": "NOT_INSTALLED_OR_TESTED",
-      "wifi": "SUPPORTED_ROUTE_NOT_PHYSICALLY_VERIFIED"
+      "physical": "USB_SNAPSHOT_JIT_LAUNCH_KEYBOARD_CAPTURE_NEUTRAL_DISCONNECT_VERIFIED",
+      "wifi": "SUPPORTED_ROUTE_NOT_PHYSICALLY_VERIFIED",
+      "evidence": "tomb-raider-transport-2026-10-10.json",
+      "remaining": [
+        "independent held-key release",
+        "Wi-Fi route",
+        "observer overhead",
+        "repeated paired baselines"
+      ],
+      "appium_idle": "185-second socket-only physical wait passed after bounded 2100-second session timeout fix"
     },
     "linux_ci": {
       "status": "ALL_THREE_JOBS_PASSED",
-      "commit": "de50d43746e7001ade8c43f1d3cf2bb2e84c80d3",
-      "run": "https://github.com/brookesdjb/Madeira/actions/runs/38048732404"
+      "commit": "1270a4b04301241188736b7e892438233eaf1eee",
+      "run": "https://github.com/brookesdjb/Madeira/actions/runs/38050402660"
     }
   },
   "experimental_patches_applied": false,

@@ -115,11 +115,16 @@ the endpoint marker. The source changes were built before committing them (build
 reports correctly record a dirty source tree); the existing local Wine changes
 and native input archives were preserved.
 
-The new build has NOT been installed or tested on iPad. No device action was
-taken while the owner installs Tomb Raider. Both USB command/capture delivery
-and the entire Wi-Fi/JIT/XCTest route still need physical checks. Existing W1
-pilot results below used the prior XCTest transport, so establish a new baseline
-with this transport before testing more changes.
+Physical follow-up: the prepared build is now installed on the M5 iPad. USB
+snapshots, JIT bootstrap, Rise of the Tomb Raider launch, keyboard replay, a
+loss-free 599-sample menu trace and neutral-replay disconnect handling pass.
+The per-game four-CPU/monitor configuration and added faultrep DLL were verified
+unchanged across installation. Manual and socket-started built-in benchmark
+runs completed at 34.30 and 33.85 game-reported FPS; these are reference and
+delivery checks, not a paired optimization comparison. See
+`tomb-raider-transport-2026-10-10.json` for exact scope and build hashes.
+Wi-Fi, independent held-key release, observer overhead and repeated controlled
+baselines remain pending. Existing W1 pilot results below used XCTest.
 
 ## Verified W1 pilot after archive correction
 
@@ -135,9 +140,8 @@ accepted performance improvement. Defaults and issue acceptance remain unchanged
 The source, archive hashes, metrics and limitations are frozen in
 `performance-pilot-2026-10-10.json`. Earlier ambiguous-archive runs are excluded.
 
-Next: install and physically verify the paired command transport when the owner
-has finished installing the game; verify watchdog/input-release behavior and
-capture through that transport; obtain repeated paired baselines; then test X1, W1,
+Next: automate Rise benchmark readiness/results, independently verify held-input
+release, and obtain repeated paired baselines; then test X1, W1,
 G1 and eligible F2 settings independently. G2 patches remain unapplied.
 
 
