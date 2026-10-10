@@ -216,10 +216,17 @@ class DeviceControl:
             raise AutomationError("probe_process_still_running")
         return {"backend": "devicectl", "confirmed_stopped": True}
 
-    def launch_probe_process(self, udid, bundle_id):
+    def launch_probe_process(self, udid, bundle_id, *, environment=None):
+        # A bounded experiment surface, never arbitrary credentials/loader vars.
+        allowed = {key: {'0','1'} for key in ('MADEIRA_SRV_COALESCE','MADEIRA_PROFILE_THREADS','MADEIRA_PROFILE_XP','MADEIRA_PROFILE_STACKS','DXMT_IOS_CACHE_DIR')}
+        allowed['FEX_MAXINST'] = {'500','1000','5000'}
+        if environment is not None and (not isinstance(environment,dict) or any(k not in allowed or not isinstance(v,str) or v not in allowed[k] for k,v in environment.items())):
+            raise AutomationError('invalid_experiment_environment')
         if self.app_process_ids(udid, bundle_id):
             raise AutomationError("jit_probe_requires_Madeira_stopped_before_start")
-        self.command(["device", "process", "launch", "--device", udid, bundle_id, "--", "--madeira-automation"], 30)
+        args = ["device", "process", "launch", "--device", udid]
+        if environment: args.extend(["--environment-variables", json.dumps(environment,separators=(',',':'))])
+        self.command([*args, bundle_id, "--", "--madeira-automation"], 30)
         pids = self.app_process_ids(udid, bundle_id)
         if len(pids) != 1:
             raise AutomationError("probe_launch_process_identity_unavailable")
