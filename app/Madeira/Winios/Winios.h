@@ -50,6 +50,9 @@ void winios_post_key(int vk, int down);
  * Safe to call before or after the compositor exists; main-thread
  * dispatch inside. */
 void winios_set_compositor_frame(double x, double y, double w, double h);
+/* Implemented only in opted-in Debug; Swift references it under the same guard.
+ * Keeps command-editor focus from selecting the guest's presentation window. */
+void winios_automation_set_presentation_window(void *window);
 void winios_set_desktop_rect(double x, double y, double w, double h, int set);
 
 /* S2 trackpad pointer. (x, y) are ABSOLUTE wine-desktop pixels (the

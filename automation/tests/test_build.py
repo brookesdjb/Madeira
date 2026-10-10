@@ -13,7 +13,7 @@ def app_fixture(tmp_path, probe=False):
     app.mkdir()
     (app / "Info.plist").write_bytes(plistlib.dumps({"CFBundleExecutable": "Madeira", "CFBundleIdentifier": "test.madeira"}))
     (app / "Madeira").write_bytes(b"main stub")
-    (app / "Madeira.debug.dylib").write_bytes(b"madeira.automation.status fex_automation_test_execute madeira.automation.command" if probe else b"ordinary binary")
+    (app / "Madeira.debug.dylib").write_bytes(b"madeira.automation.status fex_automation_test_execute madeira.automation.command winios_automation_set_presentation_window" if probe else b"ordinary binary")
     return app
 
 
@@ -30,6 +30,13 @@ def test_missing_probe_does_not_pass_as_automation_build(tmp_path):
     app = app_fixture(tmp_path)
     with pytest.raises(AutomationError, match="surface_mismatch"):
         inspect_app(app, automation=True, signed=False)
+
+
+def test_native_anchor_must_match_build_opt_in(tmp_path):
+    app = app_fixture(tmp_path)
+    (app / "Madeira").write_bytes(b"winios_automation_set_presentation_window")
+    with pytest.raises(AutomationError, match="presentation_anchor_mismatch"):
+        inspect_app(app, automation=False, signed=False)
 
 
 def test_release_cannot_enable_probe_before_invoking_build(tmp_path):

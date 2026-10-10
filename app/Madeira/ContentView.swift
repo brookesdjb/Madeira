@@ -251,6 +251,13 @@ final class MetalBackedView: UIView {
     override func didMoveToWindow() {
         super.didMoveToWindow()
         guard let w = window else { return }   // detach: leave the host be
+        #if DEBUG && MADEIRA_AUTOMATION
+        if AutomationProbe.enabled {
+            // Read commands may focus the editor while Wine initializes later.
+            // Pin its compositor to the actual surface's window, not that editor.
+            winios_automation_set_presentation_window(Unmanaged.passUnretained(w).toOpaque())
+        }
+        #endif
         MetalBackedView.keyboardTarget = self  // keyboard button targets the live view
         // SwiftUI ancestors attach gesture recognizers that can delay or
         // cancel raw touch delivery (double-tap timing is exactly what

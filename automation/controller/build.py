@@ -23,6 +23,7 @@ def inspect_app(app, automation, signed):
     probe = any(b"madeira.automation.status" in b for b in contents)
     native_fixture = any(b"fex_automation_test_execute" in b for b in contents)
     game_surface = any(b"madeira.automation.command" in b for b in contents)
+    presentation_anchor = any(b"winios_automation_set_presentation_window" in b for b in contents)
     # Check actual compiled app binaries, not just source #if declarations.
     if probe != automation:
         raise AutomationError("compiled_automation_surface_mismatch")
@@ -30,12 +31,14 @@ def inspect_app(app, automation, signed):
         raise AutomationError("compiled_automation_native_fixture_mismatch")
     if game_surface != automation:
         raise AutomationError("compiled_automation_game_surface_mismatch")
+    if presentation_anchor != automation:
+        raise AutomationError("compiled_automation_presentation_anchor_mismatch")
     if signed:
         verified = subprocess.run(["codesign", "--verify", "--deep", "--strict", str(app)],
                                   capture_output=True)
         if verified.returncode:
             raise AutomationError("app_signature_verification_failed")
-    return {"bundle_id": info["CFBundleIdentifier"], "automation_surface": probe, "automation_native_fixture": native_fixture, "automation_game_surface": game_surface,
+    return {"bundle_id": info["CFBundleIdentifier"], "automation_surface": probe, "automation_native_fixture": native_fixture, "automation_game_surface": game_surface, "automation_presentation_anchor": presentation_anchor,
             "signature_verified": signed,
             "binary_sha256": {p.name: hashlib.sha256(b).hexdigest() for p, b in zip(binaries, contents)}}
 
@@ -67,6 +70,7 @@ def build_app(root, bundle_id, team=None, configuration="Debug", automation=Fals
     if automation:
         arguments.append("SWIFT_ACTIVE_COMPILATION_CONDITIONS=$(inherited) DEBUG MADEIRA_AUTOMATION")
         arguments.append("OTHER_CPLUSPLUSFLAGS=$(inherited) -DMADEIRA_AUTOMATION=1")
+        arguments.append("OTHER_CFLAGS=$(inherited) -DMADEIRA_AUTOMATION=1")
     arguments.extend(settings)
     report = {"schema_version": 1, "configuration": configuration, "automation": automation,
               "signed": not unsigned, "hardware_validation": "NOT_PERFORMED",
