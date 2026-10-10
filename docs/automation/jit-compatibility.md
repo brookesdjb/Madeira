@@ -182,5 +182,6 @@ and its Debug dylib SHA-256 is
 `c2a3202428b8e4188c8bdf7db4f612a0c2bdce615d68560e091c7955dbe4e303`.
 The normal Debug and Release binaries exclude both the probe identifier and
 native automation fixture. Existing normal SSD app/data remain untouched.
-Borderlands GOTY on the SSD is the owner-selected next game for lifecycle/input
-acceptance; no full-game result is claimed by these standalone runs.
+The owner subsequently selected local storage instead of the SSD. Portal is
+installed in the existing app's internal Steam library as the next lifecycle/input
+target; no full-game result is claimed by the standalone JIT runs.

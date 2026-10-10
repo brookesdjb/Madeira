@@ -40,6 +40,12 @@ def parser():
     smoke.add_argument("--frontend", choices=["library", "developer"], default="library")
     actions = sub.add_parser("actions")
     actions.add_argument("file", help="JSON array of UI actions; one persistent Appium session")
+    from .game_control import OPERATIONS
+    game = sub.add_parser("game-command", help="Opted-in running app; never auto-launch, reset or force-stop a game")
+    game.add_argument("operation", choices=sorted(OPERATIONS))
+    game.add_argument("--library-id")
+    game.add_argument("--steam-app-id", type=int)
+    game.add_argument("--request-id")
     sub.add_parser("jit-test")
     visual = sub.add_parser("compare-images")
     visual.add_argument("baseline")
@@ -120,6 +126,15 @@ def main(argv=None):
                 elif args.command == "jit-test":
                     from .jit_probe import probe
                     result = probe(workflow)
+                elif args.command == "game-command":
+                    from .game_control import command
+                    workflow.require_state(4)
+                    reply = workflow.step("game_command", lambda: command(device, args.operation,
+                        library_id=args.library_id, steam_app_id=args.steam_app_id, request_id=args.request_id))
+                    workflow.report["game_command"] = reply
+                    workflow.report["status"] = "failed" if reply["status"] == "rejected" else "passed"
+                    if reply["status"] == "rejected": workflow.report["error"] = reply.get("code")
+                    result = workflow.finish(terminate=False)
                 else:
                     try:
                         execute_actions(workflow, json.loads(Path(args.file).read_text()))

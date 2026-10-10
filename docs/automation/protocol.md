@@ -50,3 +50,61 @@ standalone test has a separate private pool in FEXBridge.mm; it does not set tha
 Swift flag. FEX success is determined from the completed test result, not this
 flag. The FEX probe additionally requires an attached debugger before invoking
 that existing pool-allocation path, even if the attach-check option was disabled.
+
+## Local game commands v2 (A3 in progress)
+
+The opted-in pane now accepts a JSON request through
+`madeira.automation.command` and its `madeira.automation.send-command` button.
+`madeira.automation.reply` returns the correlated JSON reply. Status snapshots
+remain schema 1 with added `game_status`; command requests/replies are schema 2.
+No network listener, launch path, credentials or arbitrary launch arguments are
+accepted. Appium's existing paired XCTest session remains the transport.
+
+```json
+{"schema_version":2,"request_id":"launch-001","operation":"launch_game","steam_app_id":400}
+```
+
+Operations: get_status, list_installed_games, launch_game, stop_game,
+get_game_status, get_runtime_status, get_jit_status, get_diagnostics. Mutations
+require exactly one existing LibraryEntry UUID (`library_id`) or Steam App ID
+(`steam_app_id`); multiple storage copies make an App ID ambiguous. Read commands
+observe the current process and accept no selector. Requests are at most 4096
+UTF-8 bytes, IDs are 1–64 ASCII letters/digits/hyphens/underscores, and unknown
+fields/operations, malformed selectors and unsupported versions are rejected.
+Every parsed request ID is consumed once; after 1000 IDs, restart is required.
+IDs are never evicted, so a delayed old launch cannot replay.
+
+Launch requires a fresh idle library process, no prior Wine or FEX test session,
+attached JIT, no busy initialization and no current confirmation/error. It calls
+ContentView.launchLibraryEntry, retaining the normal storage validation, launch
+profile, Steam Dock and cloud-save gates. The reply `accepted/launch_requested`
+only acknowledges the request; it is not readiness. Status distinguishes IDLE,
+LAUNCH_REQUESTED, SESSION_OBSERVED, STOP_REQUESTED, SESSION_ENDING, EXITED, ERROR
+and MANUAL_INTERVENTION_REQUIRED. Readiness remains NOT_VERIFIED until a separate
+game-specific checkpoint is implemented/observed; neither elapsed time nor
+present counters prove game readiness. Error output uses fixed codes, not private
+messages. list_installed_games reports existing configured entries supported by
+current installed Steam metadata or an internal executable check.
+
+Stop accepts only the game this automation instance requested and which is
+still the active entry, after normal startup tooling releases input. It invokes
+LibraryModel.requestQuit without killing a process. The reply
+`accepted/graceful_stop_requested` is not proof of exit. The host bounded exit
+observer requires EXITED, no active library ID and both Wine/wineserver stopped.
+A confirmation or timeout preserves the game; a saving game is never killed to
+manufacture a pass. Launch requests cannot repeat in one process, including
+requests held by asynchronous storage/cloud validation.
+
+Example for an already running opted-in foreground app:
+
+```sh
+python -m automation.controller.cli game-command list_installed_games
+python -m automation.controller.cli game-command launch_game --steam-app-id 400
+python -m automation.controller.cli game-command get_game_status
+python -m automation.controller.cli game-command stop_game --steam-app-id 400
+```
+
+These commands do not launch/restart/install the app or force-stop it at session
+cleanup. Rejection exits nonzero. Full game-specific readiness/input/exit device
+acceptance remains pending; Portal on the iPad's internal storage is now the
+selected first game, replacing the earlier SSD-dependent Borderlands proposal.

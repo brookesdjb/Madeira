@@ -1288,7 +1288,7 @@ struct ContentView: View {
             #if DEBUG && MADEIRA_AUTOMATION
             .safeAreaInset(edge: .bottom) {
                 if AutomationProbe.enabled {
-                    AutomationProbePanel(enableJIT: enableJIT, runFEX: runFEXTest)
+                    AutomationProbePanel(enableJIT: enableJIT, runFEX: runFEXTest, launch: { launchLibraryEntry($0) })
                 }
             }
             #endif
@@ -4684,6 +4684,11 @@ struct MappingPanel: View {
     static let enabled = ProcessInfo.processInfo.arguments.contains("--madeira-automation")
     static let shared = AutomationProbe()
     @Published private(set) var snapshot = "{}"
+    @Published private(set) var commandReply = "{}"
+    private var requests = AutomationRequestLedger()
+    private var ownedGame: UUID?
+    private var launchRequested = false
+    private var stopRequested = false
     private var fexState = "NOT_RUN"
     private var result: Int64?
     private var sequence = 0
@@ -4692,6 +4697,12 @@ struct MappingPanel: View {
         sequence += 1
         let jit = JITCoordinator.shared
         let model = LibraryModel.shared
+        let manual = model.cloudNotice != nil || model.restartNotice != nil || model.jitNotice != nil
+        let phase = manual ? "MANUAL_INTERVENTION_REQUIRED" : (model.error != nil ? "ERROR" :
+            (model.current != nil ? (stopRequested ? "STOP_REQUESTED" : "SESSION_OBSERVED") :
+                (LibraryModel.sessionsThisRun > 0 ?
+                    (wine_process_is_running() == 0 && wineserver_is_running() == 0 ? "EXITED" : "SESSION_ENDING") :
+                    (launchRequested ? "LAUNCH_REQUESTED" : "IDLE"))))
         let data: [String: Any] = [
             "schema_version": 1,
             "sequence": sequence,
@@ -4711,11 +4722,86 @@ struct MappingPanel: View {
             "present_count": madeira_get_present_count(),
             "thermal_state": DeviceLoadDiagnostics.thermalName(ProcessInfo.processInfo.thermalState),
             "fex_test": fexState,
-            "fex_result": result.map { NSNumber(value: $0) as Any } ?? NSNull()
+            "fex_result": result.map { NSNumber(value: $0) as Any } ?? NSNull(),
+            "game_status": ["phase": phase, "readiness": "NOT_VERIFIED",
+                "active_library_id": model.current.map { $0.uuidString as Any } ?? NSNull(),
+                "owned_by_automation": ownedGame != nil && model.current == ownedGame,
+                "launching": model.launching, "sessions_this_process": LibraryModel.sessionsThisRun,
+                "last_error": model.error == nil ? NSNull() : "normal_launch_error" as Any]
         ]
         guard let encoded = try? JSONSerialization.data(withJSONObject: data, options: [.sortedKeys]),
               let text = String(data: encoded, encoding: .utf8) else { return }
         snapshot = text
+    }
+
+    func command(_ text: String, launch: (LibraryEntry) -> Void) {
+        var id: String?
+        func reply(_ status: String, _ code: String? = nil, data: Any? = nil) {
+            refresh()
+            let object: [String: Any] = ["schema_version": 2, "request_id": id as Any? ?? NSNull(),
+                "status": status, "code": code as Any? ?? NSNull(), "pid": Int(getpid()),
+                "timestamp": ISO8601DateFormatter().string(from: Date()), "data": data ?? NSNull()]
+            if let bytes = try? JSONSerialization.data(withJSONObject: object, options: [.sortedKeys]),
+               let value = String(data: bytes, encoding: .utf8) { commandReply = value }
+        }
+        guard Self.enabled else { reply("rejected", "automation_not_enabled"); return }
+        let request: AutomationCommand
+        do {
+            request = try AutomationCommand.parse(text); id = request.request_id
+            try requests.accept(request.request_id)
+        } catch {
+            reply("rejected", (error as? AutomationCommand.Failure)?.rawValue ?? "invalid_request"); return
+        }
+        let model = LibraryModel.shared
+        switch request.operation {
+        case .games:
+            // Existing library entries only. No account or arbitrary filesystem discovery.
+            reply("completed", data: installedEntries().map {
+                ["library_id": $0.id.uuidString, "title": $0.title,
+                 "steam_app_id": $0.steamAppID.map { $0 as Any } ?? NSNull(), "storage_id": $0.storageID] as [String: Any]
+            })
+        case .status, .game, .runtime, .jit, .diagnostics:
+            refresh()
+            reply("completed", data: (try? JSONSerialization.jsonObject(with: Data(snapshot.utf8))) ?? NSNull())
+        case .launch, .stop:
+            // Resolve the identifier once; multiple storage copies are ambiguous by App ID.
+            let targets = installedEntries().filter { entry in
+                entry.desktop != true && (request.library_id.map { $0 == entry.id } ?? (entry.steamAppID == request.steam_app_id))
+            }
+            guard targets.count == 1, let entry = targets.first else { reply("rejected", "game_missing_or_ambiguous"); return }
+            if request.operation == .launch {
+                guard model.enabled, !launchRequested, model.current == nil,
+                      LibraryModel.sessionsThisRun == 0, fexState == "NOT_RUN",
+                      wine_process_is_running() == 0, wineserver_is_running() == 0,
+                      !JITCoordinator.shared.busy else { reply("rejected", "fresh_idle_process_required"); return }
+                guard StikJITHelper.ready, isDebuggerAttached() else { reply("rejected", "jit_required"); return }
+                guard model.error == nil, model.cloudNotice == nil, model.restartNotice == nil,
+                      model.jitNotice == nil else { reply("rejected", "manual_intervention_required"); return }
+                ownedGame = entry.id; launchRequested = true
+                launch(entry) // Same Play path, including storage validation and cloud-save holds.
+                reply("accepted", "launch_requested")
+            } else {
+                guard ownedGame == entry.id, model.current == entry.id, !model.launching,
+                      !stopRequested else { reply("rejected", "active_owned_session_required"); return }
+                stopRequested = true
+                model.requestQuit() // Graceful close only; the game may ask to save/confirm.
+                reply("accepted", "graceful_stop_requested")
+            }
+        }
+    }
+
+    private func installedEntries() -> [LibraryEntry] {
+        LibraryModel.shared.entries.filter { entry in
+            guard entry.desktop != true else { return false }
+            if let appID = entry.steamAppID {
+                return SteamGamesModel.shared.games.contains {
+                    $0.id == appID && $0.storageID == entry.storageID && $0.installed
+                }
+            }
+            // A3's initial standalone fixture path is internal only. External
+            // access must come through the normal storage model, never a raw path.
+            return entry.storageID == "internal" && (try? LibraryModel.executable(entry.launchRelativePath)) != nil
+        }
     }
 
     func beginFEX(_ run: () -> Void) {
@@ -4738,6 +4824,9 @@ struct MappingPanel: View {
 private struct AutomationProbePanel: View {
     let enableJIT: () -> Void
     let runFEX: () -> Void
+    let launch: (LibraryEntry) -> Void
+    @State private var request = ""
+    @FocusState private var requestFocused: Bool
     @ObservedObject private var probe = AutomationProbe.shared
 
     var body: some View {
@@ -4745,6 +4834,18 @@ private struct AutomationProbePanel: View {
             Text("Development automation")
                 .accessibilityIdentifier("madeira.automation.status")
                 .accessibilityValue(probe.snapshot)
+            HStack {
+                TextField("JSON command", text: $request)
+                    .textInputAutocapitalization(.never).autocorrectionDisabled()
+                    .focused($requestFocused)
+                    .accessibilityIdentifier("madeira.automation.command")
+                Button("Send command") {
+                    requestFocused = false
+                    probe.command(request, launch: launch)
+                }.accessibilityIdentifier("madeira.automation.send-command")
+                Text("Command reply").accessibilityIdentifier("madeira.automation.reply")
+                    .accessibilityValue(probe.commandReply)
+            }
             HStack {
                 Button("Refresh") { probe.refresh() }
                     .accessibilityIdentifier("madeira.automation.refresh")
