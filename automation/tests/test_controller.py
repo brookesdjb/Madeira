@@ -52,6 +52,19 @@ def test_unknown_developer_mode_requires_check():
         native_with([raw]).select()
 
 
+@pytest.mark.parametrize("locked", [False, True, None])
+def test_unlock_gate_does_not_confuse_unlocked_since_boot_with_current_lock(locked):
+    def runner(argv, timeout):
+        result = {"passcodeRequired": locked, "unlockedSinceBoot": True}
+        Path(argv[argv.index("--json-output") + 1]).write_text(json.dumps({"info":{"outcome":"success"},"result":result}))
+    native = DeviceControl(runner)
+    if locked is False:
+        native.require_unlocked("tablet")
+    else:
+        with pytest.raises(AutomationError, match="owner_unlock" if locked else "lock_schema"):
+            native.require_unlocked("tablet")
+
+
 def test_network_device_does_not_pass_USB_preflight():
     native = native_with([raw_device(transportType="localNetwork")])
     with pytest.raises(AutomationError, match="transport_mismatch"):
@@ -145,6 +158,31 @@ def test_native_probe_cleanup_checks_bundle_and_pid_before_kill(actual_pid):
         with pytest.raises(AutomationError, match="identity_changed"):
             native.terminate_probe_process("tablet", "test.madeira", 42)
         assert not stopped and not any("terminate" in c for c in calls)
+
+
+@pytest.mark.parametrize("already_running", [False, True])
+def test_native_probe_launch_preserves_existing_process_and_records_new_pid(already_running):
+    calls, running = [], already_running
+    def runner(argv, timeout):
+        nonlocal running
+        calls.append(argv)
+        if "apps" in argv:
+            result = {"apps": [{"bundleIdentifier": "test.madeira", "url": "file:///private/owned/Madeira.app/"}]}
+        elif "processes" in argv:
+            result = {"runningProcesses": [{"executable": "file:///private/owned/Madeira.app/Madeira", "processIdentifier": 42}] if running else []}
+        elif "launch" in argv:
+            assert argv[-3:] == ["test.madeira", "--", "--madeira-automation"]
+            assert "--terminate-existing" not in argv
+            running = True; result = {}
+        else: pytest.fail("unexpected command")
+        Path(argv[argv.index("--json-output") + 1]).write_text(json.dumps({"info":{"outcome":"success"},"result":result}))
+    native = DeviceControl(runner)
+    if already_running:
+        with pytest.raises(AutomationError, match="requires_Madeira_stopped"):
+            native.launch_probe_process("tablet", "test.madeira")
+        assert not any("launch" in c for c in calls)
+    else:
+        assert native.launch_probe_process("tablet", "test.madeira") == 42
 
 
 @pytest.mark.parametrize("command", [["install", "unused.app"], ["smoke"], ["jit-test"], ["actions", "unused.json"]])

@@ -4,8 +4,8 @@
 
 The controller's HTTP protocol and failure handling are tested with a fake
 Appium server. Mac compilation/signing and binary guard checks are now verified;
-see [Mac validation](mac-validation.md). Physical UI smoke now passes on the provisioned M5 iPad; JIT coexistence
-remains unverified. Run the following on your Mac. First provisioning,
+see [Mac validation](mac-validation.md). Physical UI smoke now passes on the provisioned M5 iPad; standalone built-in JIT/exit-42 coexistence
+is observed, with repetition and normal-game acceptance still pending. Run the following on your Mac. First provisioning,
 onboarding and any OS trust prompts require a person. The controller does not
 accept those prompts, change accounts, erase data or install certificates.
 
@@ -105,7 +105,9 @@ changes. This was the successful provisioning route on this Mac.
 ## First end-to-end proof
 
 All physical CLI commands use the [shared device reservation](device-reservation.md)
-before installation or Appium connection. Competing worktrees fail immediately
+before installation or Appium connection. They also query current lock state
+and return `device_locked_requires_owner_unlock` before any mutation when a
+passcode is required. `unlockedSinceBoot` does not establish current unlock. Competing worktrees fail immediately
 instead of taking the device from a live run. Performance tools must use the same
 reservation; see issue #2. Do not delete its persistent lock files.
 
@@ -217,3 +219,9 @@ MADEIRA_RUN_JIT_PHYSICAL=1 make automation-test
 
 These run the same CLI workflows and require a running Appium server. Ordinary
 `make automation-test` performs host-only validation and does not touch a device.
+
+The standalone JIT probe uses native devicectl launch/termination with exact
+main-app PID checks and WDA for status/buttons/screenshots. Its launch variant
+is awaiting repeated hardware validation after Auto-Lock; see jit-compatibility.md.
+The native exit-42 fixture is compiled only into opted-in Debug, with the same
+ELF loader as the normal exit-0 Hello World test.

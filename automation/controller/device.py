@@ -154,6 +154,13 @@ class DeviceControl:
         self.command(["device", "install", "app", "--device", udid, str(path)], 300)
         return {"installed": True, "bundle_id": bundle_id}
 
+    def require_unlocked(self, udid):
+        data = self.command(["device", "info", "lockState", "--device", udid], 30)
+        if not isinstance(data.get("passcodeRequired"), bool):
+            raise AutomationError("unsupported_device_lock_schema")
+        if data["passcodeRequired"]:
+            raise AutomationError("device_locked_requires_owner_unlock")
+
     def application_log(self, udid, bundle_id):
         # Pull exactly the app log, never a whole Documents directory or Steam data.
         with tempfile.TemporaryDirectory(prefix="madeira-log-") as directory:
@@ -208,6 +215,15 @@ class DeviceControl:
         if self.app_process_ids(udid, bundle_id):
             raise AutomationError("probe_process_still_running")
         return {"backend": "devicectl", "confirmed_stopped": True}
+
+    def launch_probe_process(self, udid, bundle_id):
+        if self.app_process_ids(udid, bundle_id):
+            raise AutomationError("jit_probe_requires_Madeira_stopped_before_start")
+        self.command(["device", "process", "launch", "--device", udid, bundle_id, "--", "--madeira-automation"], 30)
+        pids = self.app_process_ids(udid, bundle_id)
+        if len(pids) != 1:
+            raise AutomationError("probe_launch_process_identity_unavailable")
+        return pids[0]
 
 
 def diagnostic_events(text):

@@ -75,13 +75,22 @@ class Run:
             return not self.native.app_process_ids(self.info["udid"], self.bundle_id)
         return False
 
+    def stop_owned_probe(self):
+        result = self.native.terminate_probe_process(self.info["udid"], self.bundle_id, self.probe_pid)
+        # Native termination ends the debugged PID; tell XCTest the app has
+        # stopped too, releasing its launch registration before a new session.
+        self.device.terminate_app(self.bundle_id)
+        if self.native.app_process_ids(self.info["udid"], self.bundle_id):
+            raise AutomationError("probe_process_still_running_after_xctest_cleanup")
+        return result
+
     def finish(self, terminate=True):
         # No retry/reinstall/reset: a missing session can mean a disconnected device.
         self.diagnostics()
         if terminate:
             try:
                 if self.probe_pid is not None:
-                    self.step("terminate_owned_probe_and_verify_native", lambda: self.native.terminate_probe_process(self.info["udid"], self.bundle_id, self.probe_pid))
+                    self.step("terminate_owned_probe_and_verify_native", self.stop_owned_probe)
                 else:
                     self.step("terminate", lambda: self.device.terminate_app(self.bundle_id))
                     self.step("verify_terminated", lambda: self.require_state(1))

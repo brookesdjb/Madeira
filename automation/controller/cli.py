@@ -104,6 +104,7 @@ def main(argv=None):
             print(json.dumps({"status": "connected", "device": info}))
             return 0
         with reserve_device(info["udid"], "cli:" + args.command) as lease:
+            native.require_unlocked(info["udid"])
             if args.command == "install":
                 print(json.dumps(native.install_app(info["udid"], args.app, args.bundle_id)))
                 return 0

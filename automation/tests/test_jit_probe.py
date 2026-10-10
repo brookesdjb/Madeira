@@ -51,6 +51,9 @@ class Native:
     def __init__(self, device): self.device = device
     def application_log(self, *args): return []
     def app_process_ids(self, *args): return [self.device.pid] if self.device.state != 1 else []
+    def launch_probe_process(self, udid, bundle):
+        self.device.launch_app(bundle, ["--madeira-automation"])
+        return self.device.pid
     def terminate_probe_process(self, udid, bundle, pid):
         assert pid == self.device.pid
         self.device.terminate_app(bundle)

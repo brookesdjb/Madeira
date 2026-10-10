@@ -28,6 +28,8 @@ SESSION_ACTIVE is NOT GAME_RUNNING or benchmark-ready. Runtime booleans and
 present count are observations, not a lifecycle state machine. fex_test is
 NOT_RUN / RUNNING / PASSED / FAILED; success requires result 42. UI snapshots
 have no periodic timer when the probe is unused; refresh happens on command.
+The native standalone fixture explicitly executes Linux sys_exit(42) through
+the existing loader; the normal developer Hello World test expects exit 0.
 The test pane changes layout and adds UI work, so it is unsuitable for final
 unperturbed performance measurements without further isolation.
 
@@ -37,10 +39,11 @@ virtual input and log streaming are NOT implemented in this protocol. Existing
 host log collection exports a fixed event vocabulary only. Extending commands
 must retain normal launch/cloud-save checks and one-session-per-process behavior.
 
-Security verification still required on a Mac: compile normal Debug, opted-in
-Debug and Release; verify probe identifiers/symbols are absent from non-opted-in
-builds and that a launch argument cannot enable a compiled-out probe. Host source
-guard tests do not substitute for those three builds.
+Security verification on this Mac: normal Debug, opted-in Debug and Release
+compile/sign and pass binary checks. Both the probe identifier and native
+exit-42 fixture symbol are absent from non-opted-in binaries. A launch argument
+cannot enable a compiled-out probe. See jit-compatibility.md for actual device
+results and remaining limits.
 
 launch_pool_allocated is StikJITHelper's **normal game-launch pool** flag. FEX's
 standalone test has a separate private pool in FEXBridge.mm; it does not set that
