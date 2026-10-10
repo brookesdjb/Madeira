@@ -177,3 +177,44 @@ def test_source_hashes_must_be_hex(key, value):
     item["source"][key] = value
     with pytest.raises(AutomationError, match="invalid_iteration_source"):
         b.validate_iteration(item)
+
+
+def runtime_pair():
+    base, cand = paired([20] * 5, [20] * 5)
+    for side, items in enumerate((base, cand)):
+        for item in items:
+            item['schema_version'] = 2
+            item['source'] = dict(base[0]['source'])
+            item['runtime_config'] = {'MADEIRA_SRV_COALESCE': str(side), 'cpuCount': '4', 'DXMT_WSI_MONITOR_IDENTITY': '1'}
+            item['conditions']['runtime_config_digest'] = b.runtime_digest(item['runtime_config'])
+            item['metrics'] = {'game_reported_fps': 30 + side * 6}
+    return base, cand
+
+
+def test_explicit_runtime_variable_and_game_fps():
+    base, cand = runtime_pair()
+    assert b.compare(base, cand)['reason'] == 'conditions_mismatch'
+    report = b.compare(base, cand, experiment='MADEIRA_SRV_COALESCE')
+    assert report['status'] == 'improved'
+    assert report['experiment']['baseline_runtime_digest'] != report['experiment']['candidate_runtime_digest']
+    assert report['attribution'] == 'not_established'
+
+
+def test_runtime_experiment_rejects_hidden_changes_and_different_build():
+    base, cand = runtime_pair()
+    for i in cand:
+        i['runtime_config']['cpuCount'] = '9'
+        i['conditions']['runtime_config_digest'] = b.runtime_digest(i['runtime_config'])
+    assert b.compare(base, cand, experiment='MADEIRA_SRV_COALESCE')['reason'] == 'undeclared_or_missing_runtime_difference'
+    base, cand = runtime_pair()
+    for i in cand: i['source']['binary_sha256'] = 'f' * 64
+    assert b.compare(base, cand, experiment='MADEIRA_SRV_COALESCE')['reason'] == 'runtime_experiment_requires_same_source'
+
+
+def test_runtime_digest_and_schema_enforced():
+    base, cand = runtime_pair()
+    cand[0]['runtime_config']['cpuCount'] = '9'
+    with pytest.raises(AutomationError, match='runtime_config_digest_mismatch'):
+        b.compare(base, cand, experiment='MADEIRA_SRV_COALESCE')
+    with pytest.raises(AutomationError, match='runtime_experiment_requires_schema_2'):
+        b.compare(*paired([20] * 5, [20] * 5), experiment='MADEIRA_SRV_COALESCE')
