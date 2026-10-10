@@ -4,6 +4,7 @@ import json
 import os
 from pathlib import Path
 import sys
+import time
 from .appium_controller import AppiumController
 from .device import AutomationError, DeviceControl, doctor, run
 from .workflows import Run, new_run, save_json
@@ -19,6 +20,8 @@ def parser():
     p.add_argument("--bundle-id", default=os.getenv("MADEIRA_BUNDLE_ID", DEFAULT_BUNDLE))
     p.add_argument("--team", default=os.getenv("MADEIRA_TEAM_ID"))
     p.add_argument("--wda-bundle", default=os.getenv("MADEIRA_WDA_BUNDLE_ID"))
+    p.add_argument("--transport", choices=["wired", "localNetwork"],
+                   default=os.getenv("MADEIRA_DEVICE_TRANSPORT", "wired"))
     p.add_argument("--server", default="http://127.0.0.1:4723")
     p.add_argument("--output", default=str(ROOT / "automation/runs"))
     sub = p.add_subparsers(dest="command", required=True)
@@ -27,6 +30,10 @@ def parser():
     sub.add_parser("device-check")
     build = sub.add_parser("build")
     build.add_argument("--automation", action="store_true")
+    build.add_argument("--configuration", choices=["Debug", "Release"], default="Debug")
+    build.add_argument("--unsigned", action="store_true", help="Compile/inspect without signing or installing")
+    build.add_argument("--derived-data", help="Dedicated output directory; defaults to one per build variant")
+    build.add_argument("--setting", action="append", default=[], metavar="NAME=VALUE")
     install = sub.add_parser("install")
     install.add_argument("app", help="Signed .app directory; no uninstall or data reset")
     smoke = sub.add_parser("smoke")
@@ -87,20 +94,12 @@ def main(argv=None):
             print(json.dumps({"devices": native.devices()}))
             return 0
         if args.command == "build":
-            if not args.team:
-                raise AutomationError("build_requires_--team")
-            arguments = ["xcodebuild", "-project", str(ROOT / "app/Madeira.xcodeproj"),
-                         "-scheme", "Madeira", "-configuration", "Debug",
-                         "-destination", "generic/platform=iOS", "-derivedDataPath",
-                         str(ROOT / "automation/derived-data"), f"DEVELOPMENT_TEAM={args.team}",
-                         f"MADEIRA_BUNDLE_IDENTIFIER={args.bundle_id}"]
-            if args.automation:
-                arguments.append("SWIFT_ACTIVE_COMPILATION_CONDITIONS=$(inherited) DEBUG MADEIRA_AUTOMATION")
-            # Signing must already be provisioned; do not change developer accounts.
-            run([*arguments, "build"], 1800)
-            print(json.dumps({"status": "built", "app": str(ROOT / "automation/derived-data/Build/Products/Debug-iphoneos/Madeira.app")}))
+            from .build import build_app
+            result = build_app(ROOT, args.bundle_id, args.team, args.configuration,
+                               args.automation, args.unsigned, args.derived_data, args.setting)
+            print(json.dumps(result))
             return 0
-        info = native.select(args.udid)
+        info = native.select(args.udid, args.transport)
         if args.command == "device-check":
             print(json.dumps({"status": "connected", "device": info}))
             return 0
@@ -112,6 +111,7 @@ def main(argv=None):
             device = AppiumController(args.server)
             workflow = Run(device, native, info, args.bundle_id, path)
             workflow.report["reservation"] = lease
+            connection_started = time.time()
             try:
                 workflow.step("connect", lambda: device.connect(info["udid"], args.bundle_id, args.team, args.wda_bundle))
                 if args.command == "smoke":
@@ -135,6 +135,8 @@ def main(argv=None):
                 if device.session:
                     result = workflow.finish(terminate=False)
                 else:
+                    from .startup_evidence import wda_startup_evidence
+                    workflow.report["evidence"]["wda_startup"] = wda_startup_evidence(connection_started)
                     result = workflow.report
                     save_json(path / "report.json", result)
             print(json.dumps({"status": result["status"], "report": str(path / "report.json"),

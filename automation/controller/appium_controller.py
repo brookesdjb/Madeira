@@ -59,7 +59,10 @@ class AppiumController:
                 "appium:autoLaunch": False, "appium:shouldTerminateApp": False,
                 "appium:useNewWDA": False, "appium:newCommandTimeout": 180,
                 "appium:waitForIdleTimeout": 1, "appium:showXcodeLog": False,
-                "appium:printPageSourceOnFindFailure": False}
+                "appium:printPageSourceOnFindFailure": False,
+                "appium:derivedDataPath": str(Path(__file__).resolve().parents[1] / "derived-data/wda"),
+                "appium:wdaLaunchTimeout": 120000, "appium:wdaConnectionTimeout": 45000,
+                "appium:wdaStartupRetries": 1}
         if team:
             caps.update({"appium:xcodeOrgId": team, "appium:xcodeSigningId": "Apple Development"})
         if wda_bundle:

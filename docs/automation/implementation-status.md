@@ -1,14 +1,16 @@
 # Implementation status
 
-Base: 48f976429c189f8396e23d251d8a82f43c705922. Host: Linux x86_64.
-No physical iPad, macOS SDK, Xcode, or simulator is available to this session.
+Base: 48f976429c189f8396e23d251d8a82f43c705922.
+Initial implementation ran on Linux x86_64 without Xcode or a physical iPad.
+Continuation on 2026-10-10 uses macOS 27 / Apple Silicon and Xcode 27.0.
+See [Mac validation](mac-validation.md) for current verified results and gates.
 
 | Milestone | Implemented | Tests / actual results | Remaining / limitations | Physical validation |
 |---|---|---|---|---|
-| 0 investigation | Source map, build/signing/runtime/JIT/input/log inspection | Repository cloned and inspected, Python/Node found, Xcode absent | Submodule internals not fetched; actual Mac/device inventory unknown | BLOCKED |
-| 1 controller | devicectl discovery/.app install; W3C Appium UI/lifecycle/screenshots; JSON CLI; per-step smoke reports; safe diagnostic events; bounded cleanup | 25 pytest host tests pass; 2 physical tests skipped, including real HTTP against a fake Appium server, install mismatch rejection and failure cleanup | Build/sign/WDA provision on Mac; verify real devicectl schema and SwiftUI tab identifiers; IPA install omitted | BLOCKED |
+| 0 investigation | Source map, build/signing/runtime/JIT/input/log inspection | Mac toolchain and existing component inputs inventoried; M5 iPad/iPadOS 26.7 discovered read-only over Wi-Fi | USB/unlock and dedicated test-app provisioning required | READ-ONLY INVENTORY |
+| 1 controller | devicectl discovery/.app install; W3C Appium UI/lifecycle/screenshots; JSON CLI; safe diagnostics; shared reservation; running-target install protection; private build/startup reports | Normal Debug, automation Debug, Release and WDA compile/sign on Mac; 42 host tests pass, 2 physical wrappers skipped; separate app installed via wired USB | First physical session failed: XCTest automation-mode timeout; UI Automation setting requested; identifiers/data preservation still unverified; IPA install omitted | WDA INITIALIZATION BLOCKED |
 | 2 JIT coexistence | Investigation, opt-in XCTest status pane, bounded compatibility experiment | Mock tests cover success, failed x86 result, timeout, termination and fresh-process reactivation; no physical experiment performed | Must demonstrate JIT + responsive WDA + x86 execution; no claim of compatibility | BLOCKED |
-| 3 internal API | Minimal debug-only status/JIT/FEX probe via XCTest | Compile guards checked by host source test; Swift not compiled | Full game lifecycle API deferred until smoke/JIT gate; Release binary exclusion unverified | NOT TESTED |
+| 3 internal API | Minimal debug-only status/JIT/FEX probe via XCTest | Swift compiled; actual app binary contains probe only in opted-in Debug and excludes it in normal Debug/Release | Full game lifecycle API deferred until smoke/JIT gate; runtime opt-in and behavior unverified on iPad | NOT TESTED |
 | 4 game input | Existing integration points mapped | None | Virtual source, bounded release, recorder/replay; no direct bridge writes added | NOT TESTED |
 | 5 visual checks | External screenshots, run association, crop/threshold comparison and suspected blank detection | Mock capture and 5 synthetic-image tests pass | Actual Metal screenshot fidelity and per-game threshold calibration | NOT TESTED |
 | 6 performance | Existing telemetry mapped, no new counters | None | Real per-frame instrumentation and explicit CPU/GPU distinction | NOT TESTED |

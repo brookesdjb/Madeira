@@ -47,6 +47,13 @@ def test_unknown_developer_mode_requires_check():
         native_with([raw]).select()
 
 
+def test_network_device_does_not_pass_USB_preflight():
+    native = native_with([raw_device(transportType="localNetwork")])
+    with pytest.raises(AutomationError, match="transport_mismatch"):
+        native.select("tablet", transport="wired")
+    assert native.select("tablet", transport="localNetwork")["transport"] == "localNetwork"
+
+
 def test_install_checks_bundle_before_calling_device(tmp_path):
     app = tmp_path / "Madeira.app"
     app.mkdir()
@@ -64,10 +71,62 @@ def test_install_argv_preserves_spaces(tmp_path):
     calls = []
     def runner(argv, timeout):
         calls.append(argv)
-        Path(argv[argv.index("--json-output") + 1]).write_text('{"info":{"outcome":"success"},"result":{}}')
+        Path(argv[argv.index("--json-output") + 1]).write_text('{"info":{"outcome":"success"},"result":{"apps":[]}}')
     DeviceControl(runner).install_app("tablet", app, "test.madeira")
-    assert calls[0][-1] == str(app)
-    assert "uninstall" not in calls[0]
+    assert calls[-1][-1] == str(app)
+    assert not any("uninstall" in call for call in calls)
+
+
+def test_install_refuses_running_target_without_stopping_or_replacing_it(tmp_path):
+    app = tmp_path / "Madeira.app"
+    app.mkdir()
+    (app / "Info.plist").write_bytes(plistlib.dumps({"CFBundleIdentifier": "test.madeira"}))
+    calls = []
+    def runner(argv, timeout):
+        calls.append(argv)
+        if "apps" in argv:
+            result = {"apps": [{"bundleIdentifier": "test.madeira", "url": "file:///private/apps/target/Madeira.app/"}]}
+        elif "processes" in argv:
+            result = {"runningProcesses": [{"executable": "file:///private/apps/target/Madeira.app/Madeira", "processIdentifier": 12}]}
+        else:
+            pytest.fail("must not install over a running target")
+        Path(argv[argv.index("--json-output") + 1]).write_text(json.dumps({"info":{"outcome":"success"},"result":result}))
+    with pytest.raises(AutomationError, match="target_app_stopped"):
+        DeviceControl(runner).install_app("tablet", app, "test.madeira")
+    assert len(calls) == 2
+
+
+def test_install_stopped_target_with_other_app_running_preserves_app_path(tmp_path):
+    app = tmp_path / "signed build.app"
+    app.mkdir()
+    (app / "Info.plist").write_bytes(plistlib.dumps({"CFBundleIdentifier": "test.madeira"}))
+    calls = []
+    def runner(argv, timeout):
+        calls.append(argv)
+        if "apps" in argv:
+            result = {"apps": [{"bundleIdentifier": "test.madeira", "url": "file:///private/apps/target/Madeira.app/"}]}
+        elif "processes" in argv:
+            result = {"runningProcesses": [{"executable": "file:///private/apps/other/Madeira.app/Madeira"}]}
+        else:
+            result = {}
+        Path(argv[argv.index("--json-output") + 1]).write_text(json.dumps({"info":{"outcome":"success"},"result":result}))
+    DeviceControl(runner).install_app("tablet", app, "test.madeira")
+    assert calls[-1][-1] == str(app)
+
+
+@pytest.mark.parametrize("command", [["install", "unused.app"], ["smoke"], ["jit-test"], ["actions", "unused.json"]])
+def test_cli_reservation_blocks_all_control_before_install_or_session(tmp_path, monkeypatch, capsys, command):
+    from automation.controller import cli
+    from automation.controller.reservation import reserve_device
+    class Native:
+        def select(self, *args): return {"udid": "tablet"}
+        def install_app(self, *args): pytest.fail("must not install while reserved")
+    monkeypatch.setattr(cli, "DeviceControl", Native)
+    monkeypatch.setattr(cli, "AppiumController", lambda *args: pytest.fail("must not connect while reserved"))
+    monkeypatch.setenv("MADEIRA_RESERVATION_DIR", str(tmp_path))
+    with reserve_device("tablet", "existing-owner"):
+        assert cli.main(command) == 2
+    assert json.loads(capsys.readouterr().out)["error"] == "device_reserved_by_another_run"
 
 
 @pytest.mark.parametrize("url", ["http://0.0.0.0:4723", "http://example.com", "https://localhost", "http://a:b@localhost"])

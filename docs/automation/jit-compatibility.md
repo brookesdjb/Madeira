@@ -1,7 +1,8 @@
 # JIT / WebDriverAgent compatibility
 
-**Result: UNKNOWN — no physical iPad or Mac was available.** Mock tests below
-exercise orchestration only. There is no claim that WDA and JIT currently coexist.
+**Result: UNKNOWN — physical smoke is still gated by WDA initialization.**
+The Mac build and binary compile guards now pass; see mac-validation.md. Mock
+tests below exercise orchestration only. WDA/JIT coexistence remains unverified.
 
 ## Established by source inspection
 
@@ -30,7 +31,7 @@ After the smoke test passes, create a development build with both compile flags:
 
 ```sh
 make device-build BUILD_FLAGS=--automation
-make device-install APP="$PWD/automation/derived-data/Build/Products/Debug-iphoneos/Madeira.app"
+make device-install APP="$PWD/automation/derived-data/automation-debug/Build/Products/Debug-iphoneos/Madeira.app"
 # Madeira must be stopped first; the probe refuses to kill an existing game.
 make jit-test
 ```

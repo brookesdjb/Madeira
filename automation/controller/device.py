@@ -6,6 +6,7 @@ import plistlib
 import shutil
 import subprocess
 import tempfile
+import urllib.parse
 from pathlib import Path
 
 
@@ -13,9 +14,9 @@ class AutomationError(RuntimeError):
     pass
 
 
-def run(argv, timeout=120):
+def run(argv, timeout=120, cwd=None):
     try:
-        result = subprocess.run(argv, capture_output=True, text=True, timeout=timeout, check=False)
+        result = subprocess.run(argv, capture_output=True, text=True, timeout=timeout, check=False, cwd=cwd)
     except FileNotFoundError as exc:
         raise AutomationError(f"missing_tool:{Path(argv[0]).name}") from exc
     except subprocess.TimeoutExpired as exc:
@@ -39,11 +40,24 @@ def doctor():
                 versions[name] = run([executables[name], *args], 30).strip()
             except AutomationError as exc:
                 versions[name] = str(exc)
+    driver = None
+    if executables["appium"]:
+        try:
+            # Appium discovers npm-managed drivers from this package directory.
+            data = json.loads(run([executables["appium"], "driver", "list", "--installed", "--json"],
+                                  30, cwd=local_appium.parents[2]))
+            driver = data.get("xcuitest", {}).get("version")
+        except (AutomationError, ValueError):
+            pass
+    blockers = []
+    if platform.system() != "Darwin" or not shutil.which("xcrun") or not shutil.which("xcodebuild"):
+        blockers.append("macOS_with_Xcode_required")
+    if not driver:
+        blockers.append("local_Appium_XCUITest_driver_required")
     return {"platform": platform.system(), "versions": versions,
             "tools": {name: bool(executables[name]) for name in names},
-            "physical_validation": "NOT_PERFORMED",
-            "blockers": [] if platform.system() == "Darwin" and shutil.which("xcrun")
-            else ["macOS_with_Xcode_required"]}
+            "xcuitest_version": driver, "physical_validation": "NOT_PERFORMED",
+            "blockers": blockers}
 
 
 class DeviceControl:
@@ -80,7 +94,7 @@ class DeviceControl:
                             "developer_mode": props.get("developerModeStatus")})
         return devices
 
-    def select(self, udid=None):
+    def select(self, udid=None, transport=None):
         devices = self.devices()
         candidates = [d for d in devices if d["device_type"] == "iPad"
                       or str(d["model"]).startswith("iPad")]
@@ -99,6 +113,8 @@ class DeviceControl:
             raise AutomationError("developer_mode_requires_manual_check")
         if device["tunnel"] != "connected":
             raise AutomationError("device_disconnected_or_locked")
+        if transport and device["transport"] != transport:
+            raise AutomationError("device_transport_mismatch:requires_" + transport)
         return device
 
     def install_app(self, udid, app_path, bundle_id):
@@ -112,6 +128,29 @@ class DeviceControl:
             raise AutomationError("invalid_app_plist") from exc
         if actual != bundle_id:
             raise AutomationError("bundle_identifier_mismatch")
+        # Check the installed bundle's actual URL, rather than guessing from
+        # the executable name shared by multiple Madeira development apps.
+        apps = self.command(["device", "info", "apps", "--device", udid,
+                             "--bundle-id", bundle_id], 30)
+        if not isinstance(apps.get("apps"), list):
+            raise AutomationError("unsupported_installed_apps_schema")
+        for installed in apps["apps"]:
+            if installed.get("bundleIdentifier") != bundle_id:
+                raise AutomationError("installed_app_identity_mismatch")
+            url = installed.get("url")
+            if not isinstance(url, str) or not url:
+                raise AutomationError("installed_app_url_unavailable")
+            processes = self.command(["device", "info", "processes", "--device", udid], 30)
+            if not isinstance(processes.get("runningProcesses"), list):
+                raise AutomationError("unsupported_process_schema")
+            prefix = urllib.parse.unquote(urllib.parse.urlparse(url).path).rstrip("/") + "/"
+            for process in processes["runningProcesses"]:
+                executable = process.get("executable")
+                if not isinstance(executable, str):
+                    raise AutomationError("unsupported_process_executable_schema")
+                executable_path = urllib.parse.unquote(urllib.parse.urlparse(executable).path)
+                if executable_path.startswith(prefix):
+                    raise AutomationError("install_requires_target_app_stopped_to_preserve_active_games")
         self.command(["device", "install", "app", "--device", udid, str(path)], 300)
         return {"installed": True, "bundle_id": bundle_id}
 
