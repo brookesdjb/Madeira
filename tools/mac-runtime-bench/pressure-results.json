@@ -1,0 +1,256 @@
+{
+  "timestamp_utc": "20261010T134100.658065Z",
+  "hardware": "Mac14,9",
+  "compiler": "Apple clang version 21.0.0 (clang-2100.3.34.2)",
+  "app_commit": "830169f7fb919b708ed2242da8710ac54f60c9f8",
+  "fex_commit": "3bec2ac498bf78156ab47c0c194b0e8cb2849756",
+  "fex_status": "",
+  "limits": {
+    "arena_mib": 8192,
+    "scratch_buffer_mib": 16,
+    "physical_memory_cap": false,
+    "wine_va_scanner": false,
+    "game_execution": false,
+    "fex_x86_execution": false,
+    "ipad_performance_evidence": false
+  },
+  "experiment": {
+    "name": "release_idle_buffers_after_failed_allocation",
+    "variant_summaries": {
+      "production": [
+        {
+          "workers": 4,
+          "median_run_p95_claim_us": 6.687,
+          "min_run_p95_claim_us": 4.125,
+          "max_run_p95_claim_us": 12.083
+        },
+        {
+          "workers": 9,
+          "median_run_p95_claim_us": 21.875,
+          "min_run_p95_claim_us": 18.75,
+          "max_run_p95_claim_us": 30.584
+        },
+        {
+          "workers": 84,
+          "median_run_p95_claim_us": 118.4375,
+          "min_run_p95_claim_us": 103.292,
+          "max_run_p95_claim_us": 125.75
+        }
+      ],
+      "pressure": [
+        {
+          "workers": 4,
+          "median_run_p95_claim_us": 6.9165,
+          "min_run_p95_claim_us": 3.083,
+          "max_run_p95_claim_us": 9.166
+        },
+        {
+          "workers": 9,
+          "median_run_p95_claim_us": 21.9165,
+          "min_run_p95_claim_us": 15.708,
+          "max_run_p95_claim_us": 26.583
+        },
+        {
+          "workers": 84,
+          "median_run_p95_claim_us": 105.8545,
+          "min_run_p95_claim_us": 51.333,
+          "max_run_p95_claim_us": 123.25
+        }
+      ]
+    },
+    "execution_order": "AB then BA, alternating by trial",
+    "production_source_modified": false,
+    "unrecoverable_null_claim_fixed": false
+  },
+  "elapsed_seconds": 14.000611082999967,
+  "status": "PASS_KNOWN_NULL_CLAIM_BEHAVIOR_REPRODUCED",
+  "source_sha256": {
+    "bench.cpp": "566a2de5da92a321b29f9986f3d26a753b6d0e4e569ddd987aecb381d9499b0a",
+    "run.py": "84f8c12cffa6943903fbe012ac07f10eb48a747f0f5d8083f127d7fe40071dd0",
+    "pressure_pool.h": "283a1d4f794b5adb577ffe88b398c1ab2752bb672bd74737d0072c4a32cb693f",
+    "FEXCore/include/FEXCore/Utils/ThreadPoolAllocator.h": "896510aef9fef95cf9198eb817ff1b0d73b6aeec9bcbd20d4cae4989ff89bf7f"
+  },
+  "full_report": "runs/20261010T134100.658065Z/report.json",
+  "validation": {
+    "cases_per_suite": 11,
+    "sanitized_suites": 2,
+    "optimized_suites": 20,
+    "cases_checked": 242,
+    "reown_races_per_variant": 1100,
+    "sanitizers": [
+      "address",
+      "undefined"
+    ],
+    "thread_sanitizer": false
+  },
+  "raw_release_p95_us": {
+    "production": {
+      "4": [
+        6.541,
+        7.459,
+        6.0,
+        12.083,
+        4.125,
+        5.709,
+        6.083,
+        8.958,
+        6.958,
+        6.833
+      ],
+      "9": [
+        22.958,
+        21.792,
+        30.584,
+        18.75,
+        24.0,
+        21.875,
+        19.792,
+        22.292,
+        19.75,
+        21.875
+      ],
+      "84": [
+        121.166,
+        123.25,
+        112.833,
+        103.292,
+        125.75,
+        120.125,
+        116.75,
+        123.875,
+        110.375,
+        104.167
+      ]
+    },
+    "pressure": {
+      "4": [
+        3.917,
+        7.083,
+        6.75,
+        8.584,
+        8.833,
+        8.333,
+        9.166,
+        4.792,
+        3.083,
+        6.666
+      ],
+      "9": [
+        15.708,
+        20.458,
+        24.709,
+        21.125,
+        22.666,
+        21.167,
+        23.375,
+        23.542,
+        21.167,
+        26.583
+      ],
+      "84": [
+        107.084,
+        111.5,
+        94.666,
+        51.333,
+        123.0,
+        119.25,
+        99.167,
+        123.25,
+        104.625,
+        95.75
+      ]
+    }
+  },
+  "pressure_correctness": [
+    {
+      "variant": "production",
+      "cases": [
+        {
+          "case": "pressure_young_disowned_16mib",
+          "checks_passed": true,
+          "allocation_calls": 4,
+          "allocation_failures": 1,
+          "null_claims": 1,
+          "peak_reserved_mib": 8192,
+          "workers": 0,
+          "claim_p95_us": 0.0
+        },
+        {
+          "case": "pressure_adjacent_disowned_8mib",
+          "checks_passed": true,
+          "allocation_calls": 5,
+          "allocation_failures": 1,
+          "null_claims": 1,
+          "peak_reserved_mib": 8192,
+          "workers": 0,
+          "claim_p95_us": 0.0
+        },
+        {
+          "case": "pressure_adjacent_unclaimed_8mib",
+          "checks_passed": true,
+          "allocation_calls": 5,
+          "allocation_failures": 1,
+          "null_claims": 1,
+          "peak_reserved_mib": 8192,
+          "workers": 0,
+          "claim_p95_us": 0.0
+        },
+        {
+          "case": "pressure_races_lock_free_reown",
+          "checks_passed": true,
+          "allocation_calls": 201,
+          "allocation_failures": 100,
+          "null_claims": 100,
+          "peak_reserved_mib": 8192,
+          "workers": 0,
+          "claim_p95_us": 0.0
+        }
+      ]
+    },
+    {
+      "variant": "pressure",
+      "cases": [
+        {
+          "case": "pressure_young_disowned_16mib",
+          "checks_passed": true,
+          "allocation_calls": 5,
+          "allocation_failures": 1,
+          "null_claims": 0,
+          "peak_reserved_mib": 8192,
+          "workers": 0,
+          "claim_p95_us": 0.0
+        },
+        {
+          "case": "pressure_adjacent_disowned_8mib",
+          "checks_passed": true,
+          "allocation_calls": 6,
+          "allocation_failures": 1,
+          "null_claims": 0,
+          "peak_reserved_mib": 8192,
+          "workers": 0,
+          "claim_p95_us": 0.0
+        },
+        {
+          "case": "pressure_adjacent_unclaimed_8mib",
+          "checks_passed": true,
+          "allocation_calls": 6,
+          "allocation_failures": 1,
+          "null_claims": 0,
+          "peak_reserved_mib": 8192,
+          "workers": 0,
+          "claim_p95_us": 0.0
+        },
+        {
+          "case": "pressure_races_lock_free_reown",
+          "checks_passed": true,
+          "allocation_calls": 301,
+          "allocation_failures": 183,
+          "null_claims": 83,
+          "peak_reserved_mib": 8192,
+          "workers": 0,
+          "claim_p95_us": 0.0
+        }
+      ]
+    }
+  ]
+}
