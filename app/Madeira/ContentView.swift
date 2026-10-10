@@ -4869,6 +4869,16 @@ private struct AutomationProbePanel: View {
     @FocusState private var requestFocused: Bool
     @ObservedObject private var probe = AutomationProbe.shared
 
+    private func restoreGameFocus() {
+        requestFocused = false
+        // Typing into the overlay can make its window key. Winios attaches its
+        // compositor to the key window at startup: restore the normal app
+        // window before dispatch, so guest rendering cannot cover this HUD.
+        let scene = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
+            .first { $0.activationState == .foregroundActive }
+        scene?.windows.first { $0.windowLevel == .normal && !$0.isHidden }?.makeKey()
+    }
+
     var body: some View {
         VStack(spacing: 4) {
             Text("Development automation")
@@ -4880,7 +4890,7 @@ private struct AutomationProbePanel: View {
                     .focused($requestFocused)
                     .accessibilityIdentifier("madeira.automation.command")
                 Button("Send command") {
-                    requestFocused = false
+                    restoreGameFocus()
                     probe.command(request, launch: launch)
                 }.accessibilityIdentifier("madeira.automation.send-command")
                 Text("Command reply").accessibilityIdentifier("madeira.automation.reply")
@@ -4892,11 +4902,12 @@ private struct AutomationProbePanel: View {
                 Button("Enable JIT") {
                     guard !JITCoordinator.shared.busy, LibraryModel.shared.current == nil,
                           wine_process_is_running() == 0 else { return }
+                    restoreGameFocus()
                     enableJIT()
                     probe.refresh()
                 }
                 .accessibilityIdentifier("madeira.automation.enable-jit")
-                Button("Test FEX") { probe.beginFEX(runFEX) }
+                Button("Test FEX") { restoreGameFocus(); probe.beginFEX(runFEX) }
                     .accessibilityIdentifier("madeira.automation.test-fex")
             }
             .buttonStyle(.bordered)
