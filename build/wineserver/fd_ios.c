@@ -29,6 +29,9 @@
 #include <mach/mach_vm.h>
 #include <mach/vm_region.h>
 #include "wine_log_ios.h"
+#include "request_wake_ios.h"
+#include <stdlib.h>
+#include <string.h>
 
 /* iOS-Madeira 2026-07-05: in-process request-wake semaphore. The iOS
  * server loop can't block in poll/kqueue (AF_UNIX invisible in the
@@ -40,9 +43,15 @@
  * right after writing a request; the loop sleeps in semaphore_timedwait
  * and wakes instantly. Extra signals just cause cheap extra scans. */
 semaphore_t ios_srv_wake_sem = 0;
+static struct ios_request_wake_state ios_srv_request_wake;
+static int ios_srv_coalesce;
 void ios_wineserver_wake(void)
 {
-    if (ios_srv_wake_sem) semaphore_signal( ios_srv_wake_sem );
+    semaphore_t sem = __atomic_load_n( &ios_srv_wake_sem, __ATOMIC_ACQUIRE );
+    if (!sem) return;
+    if (!__atomic_load_n( &ios_srv_coalesce, __ATOMIC_RELAXED ) ||
+        ios_request_wake_mark( &ios_srv_request_wake ))
+        semaphore_signal( sem );
 }
 
 /* __WINESRC__ must be defined via -D flag so unicode_fix.h can see it */
@@ -1295,10 +1304,15 @@ void main_loop(void)
 
         ws_log("[wineserver-fd] iOS poll loop: master_fd=%d nb_users=%d active=%d", pollfd[0].fd, nb_users, active_users);
         {
-            kern_return_t skr = semaphore_create( mach_task_self(), &ios_srv_wake_sem,
+            semaphore_t sem = 0;
+            const char *coalesce = getenv( "MADEIRA_SRV_COALESCE" );
+            __atomic_store_n( &ios_srv_coalesce, coalesce && !strcmp( coalesce, "1" ), __ATOMIC_RELAXED );
+            ios_request_wake_begin_scan( &ios_srv_request_wake );
+            kern_return_t skr = semaphore_create( mach_task_self(), &sem,
                                                   SYNC_POLICY_FIFO, 0 );
-            ws_log("[wineserver-fd] request-wake semaphore: kr=%d sem=0x%x", skr, ios_srv_wake_sem);
-            if (skr != KERN_SUCCESS) ios_srv_wake_sem = 0;
+            if (skr != KERN_SUCCESS) sem = 0;
+            __atomic_store_n( &ios_srv_wake_sem, sem, __ATOMIC_RELEASE );
+            ws_log("[wineserver-fd] request-wake semaphore: kr=%d sem=0x%x coalesce=%d", skr, sem, ios_srv_coalesce);
         }
         while (active_users)
         {
@@ -1471,6 +1485,12 @@ void main_loop(void)
                     if (late_us > ios_late_max_us) ios_late_max_us = late_us;
                 }
             }
+            /* Clear before any readiness scan. Requests coalesced before this
+             * point are visible to this pass; a request arriving after its fd
+             * was scanned changes 0 -> 1 and leaves a token for the next pass.
+             * Keep the same deadline/INET tick and fixed-sleep A/B behavior. */
+            if (__atomic_load_n( &ios_srv_coalesce, __ATOMIC_RELAXED ))
+                ios_request_wake_begin_scan( &ios_srv_request_wake );
             set_current_time();
 
             /* Real sockets first: zero-timeout poll() gives true INET
