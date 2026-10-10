@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// Copyright 2026 David Brookes
+// Copyright 2026 125hz
 // Madeira Converter Exception: see LICENSE-EXCEPTION.md
 
 import Foundation
@@ -228,18 +228,34 @@ import UniformTypeIdentifiers
             let recordedOwner = try? String(contentsOf: owner, encoding: .utf8)
             let devices = try SteamStoragePath.native("dosdevices", root: prefix)
             try fm.createDirectory(at: devices, withIntermediateDirectories: true)
-            try SteamStorageMapping.replace(devices.appendingPathComponent("e:"), root: access.root,
-                                            libraryID: libraryID, ownerID: recordedOwner)
-            // Valve's client rejects E: as unmounted on the tested iPad runtime.
-            // Register the same scoped directory beneath C:, without copying it.
-            try SteamStorageMapping.replace(MadeiraDock.drive.appendingPathComponent(SteamStoragePath.externalAlias),
-                                            root: access.root, libraryID: libraryID, ownerID: recordedOwner)
+            let usesPrebuiltBridge = Bundle.main.object(forInfoDictionaryKey: "MadeiraUsesPrebuiltNativeBridge") as? Bool == true
+            var eOwner = recordedOwner
+            if usesPrebuiltBridge, recordedOwner == nil {
+                // Only the isolated runtime probe owned E: before the library
+                // frontend. Its persisted registration proves that ownership;
+                // a remount may have left its symlink at an obsolete mount path.
+                let legacy = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+                    .appendingPathComponent("external-library-prototype.json")
+                if let data = try? Data(contentsOf: legacy),
+                   let prototype = try? JSONDecoder().decode(SteamStorageLibrary.self, from: data),
+                   prototype.id == libraryID, prototype.bookmark != nil {
+                    eOwner = prototype.id
+                }
+            }
+            try SteamStorageMapping.replace(devices.appendingPathComponent("e:"), root: access.root, libraryID: libraryID, ownerID: eOwner)
+            if usesPrebuiltBridge {
+                // The pinned binary's working-directory bridge only accepts C:.
+                // Its direct-launch CWD alias is scoped and identity-checked just
+                // like E:. The game's canonical path and Dock mapping remain E:.
+                try SteamStorageMapping.replace(MadeiraDock.drive.appendingPathComponent("MadeiraExternalLibrary"), root: access.root,
+                                                libraryID: libraryID, ownerID: recordedOwner)
+            }
+            try Data(libraryID.utf8).write(to: owner, options: .atomic)
             let apps = Dictionary(uniqueKeysWithValues: catalog.assignments.values.filter {
                 $0.location.libraryID == libraryID && $0.installed
             }.map { ($0.appID, $0.bytes ?? 0) })
-            try SteamLibraryFolders.register(externalID: libraryID, name: access.library.name, apps: apps,
-                                             drive: MadeiraDock.drive, verifiedAliasOwnerID: recordedOwner)
-            try Data(libraryID.utf8).write(to: owner, options: .atomic)
+            try SteamLibraryFolders.register(externalID: libraryID, name: access.library.name, apps: apps, drive: MadeiraDock.drive,
+                                             compatibilityAlias: usesPrebuiltBridge)
             setenv("MADEIRA_EXTERNAL_LIBRARY_ID", libraryID, 1)
         } catch {
             releaseSession()
@@ -325,19 +341,16 @@ struct SteamStorageSettings: View {
                     Button { Task { await storage.check() } } label: {
                         HStack {
                             if storage.checking { ProgressView() }
-                            Text(storage.checking ? "Checking SSD…" : "Check SSD connection")
+                            Text(storage.checking ? "Checking SSD…" : "Check connection")
                         }
                     }.disabled(busy || storage.checking)
                 }
-                Button(storage.catalog.external == nil ? "Choose SSD library folder" : "Select library folder again") { picking = true }
+                Button(storage.catalog.external == nil ? "Choose SSD library folder" : "Reauthorize the same folder") { picking = true }
                     .disabled(busy)
             }
             Section {
                 Text("Choose a dedicated folder on a locally attached SSD. Game files, download progress and depot caches stay there. Windows and Steam client files stay on the iPad.")
                 Text("Existing installations remain in their current library.")
-                if storage.catalog.external != nil {
-                    Text("If checking the connection does not restore access, select the original library folder again. Choosing a different folder will not reconnect these games.")
-                }
             }.font(.footnote)
             if let error { Section { Text(error).foregroundStyle(.red) } }
         }

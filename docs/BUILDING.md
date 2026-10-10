@@ -63,8 +63,13 @@ git-ignored and consumed by the app project.
    `app/Madeira/legal/LICENSES-rppairing-crates.txt` (tracked). `cargo test`
    in that folder runs its host tests. Verified on the development machine.
 5. Native D3D12 runtime: `build/madeira-d3d12/build-pe.sh` -> `d3d12.dll`, `madeira_d3d12.dll` and the test executables in `app/Madeira/arm64ec-windows/` (tracked). Verified this session. `build/madeira-d3d12/fetch-converter.sh` re-verifies the converter library; `build/stage-licenses.sh` refreshes the bundled licence copies (the Xcode build fails if they are stale).
-6. App: `xcodebuild -project app/Madeira.xcodeproj -scheme Madeira -destination 'generic/platform=iOS' -allowProvisioningUpdates build` (Debug is the configuration that runs the games; Release builds have crashed the guest), then zip `Payload/Madeira.app` into an IPA and sideload. Verified this session on the development machine.
-7. WoW64 (32-bit programs, optional): `build/wine-i386/build.sh` (i386 Wine farm
+6. OpenGL games:
+   - Before step 3, apply the Wine patch: `git -C wine apply ../patches/wine-opengl-winios.patch`. Then rebuild the tracked `opengl32.dll` with `build/wine-pe/build-modules.sh opengl32`.
+   - `build/moltenvk-ios/build.sh`, then `build/mesa-ios/build.sh` -> `app/Madeira/gl/`, the desktop OpenGL backend. Optional: without it the app uses OpenGL ES. The script applies every file in `build/mesa-ios/patches` once (a `.madeira-applied-*` marker in the Mesa source records it), so an existing Mesa tree picks up a new patch on the next run.
+   - 32-bit OpenGL games (id Tech 3: Jedi Academy, Jedi Outcast, Quake III) need all of: the regenerated wow64 thunks in `wine-opengl-winios.patch` (from `dlls/opengl32/make_opengl`; to regenerate, run `perl make_opengl` in `wine/dlls/opengl32`, which downloads the pinned Khronos registry files into `~/.cache/wine`), `build/ntdll-unix` rebuilt, and Mesa patch `0004` (Zink on MoltenVK: fragment inputs Metal can link, and no crash when a pipeline fails). They need the desktop OpenGL (Zink) backend; fixed-function OpenGL does not exist in OpenGL ES. A 32-bit process gets `GL_EXTENSIONS` cut to 3072 bytes, because these engines copy it into a fixed buffer; `env.MADEIRA_GL_EXTENSIONS_MAX` in madeira.cfg sets another limit (0 = none).
+   - Each script says what source to download if it is missing. Verified on the development machine.
+7. App: `xcodebuild -project app/Madeira.xcodeproj -scheme Madeira -destination 'generic/platform=iOS' -allowProvisioningUpdates build` (Debug is the configuration that runs the games; Release builds have crashed the guest), then zip `Payload/Madeira.app` into an IPA and sideload. Verified this session on the development machine.
+8. WoW64 (32-bit programs, optional): `build/wine-i386/build.sh` (i386 Wine farm
    -> `app/Madeira/i386-windows/`), `build/fex-wow64/build.sh` (FEX WOW64 module
    -> `app/Madeira/aarch64-windows/xtajit.dll`) and the aarch64 `wow64.dll` /
    `wow64win.dll`; see docs/WOW64.md, "Building". UNVERIFIED on macOS.
@@ -81,82 +86,27 @@ docs/LICENSING.md keeps the relink capability marked unverified. The
 alternative the LGPL offers, shipping the application's object files, is
 not currently done.
 
-## External storage checks
+## External storage build preparation (2026-10-09)
 
-`python3 tests/host/typecheck-ios.py` type-checks the production Swift sources
-with the installed iOS SDK without linking native archives. It is not a complete
-app build. The download integration harness supports macOS and Linux; see
-[EXTERNAL_STORAGE.md](EXTERNAL_STORAGE.md) for commands and validation limits.
+The pinned top-level Wine, FEX and DXMT revisions are now publicly accessible;
+Madeira Dock at `72558e416a390f3669457930f09a389e54f49556` was initialized
+successfully. Nested dependencies and the full native build remain unverified.
+The current local checkout lacks the native archives, toolchains and VC runtime
+resource required for a complete app build. See
+[EXTERNAL_STORAGE.md](EXTERNAL_STORAGE.md) for the exact attempt, provenance,
+missing inputs and a reproducible independently signed SSD data-access probe.
+`python3 tests/host/typecheck-ios.py` validates all production Swift sources
+without pretending to link the absent runtime. The Steam download host harness
+now supports both macOS native libraries and the existing Linux shims.
 
-The independent data-access probe under `tests/device/ssd-probe` builds with
-XcodeGen and Xcode. Use a separate bundle ID and a dedicated scratch folder.
-Windows execution fixtures live under `tests/device/ssd-execution`; they require
-llvm-mingw. Neither probe is part of the production app target.
-
-### Native link validation for external storage
-
-On 2026-10-09, the main-based SSD change compiled and linked in Debug with Xcode
-27 / iOS 27 SDK, then passed deep/strict code-signature verification as an isolated
-app. This validates the native link, not device gameplay. The application and
-pinned submodule sources were unchanged by the prerequisite work below. Tracked
-Windows DLL farms and the converter remain binary inputs; Microsoft runtime DLLs
-were staged from the preserved published app, not rebuilt or committed.
-
-The clean build required these additions to the recipes above:
-
-- Install Bison 3 and put it before macOS Bison in PATH for Wine configuration.
-- Initialize the pinned FEX, Wine and DXMT submodules and their required nested
-  dependencies. FEX's iOS configuration also needs
-  `-DCMAKE_SYSTEM_PROCESSOR=arm64 -DTUNE_CPU=none`: the default native CPU probe
-  reads Linux `/proc/cpuinfo`. Run configuration fresh if the first attempt cached
-  an empty processor. Build `JemallocLibs` in addition to `FEXCore` and
-  `FEXCore_Base`; the app links all three. No FEX source edits were needed.
-- Build FFmpeg, GnuTLS headers/libraries, FreeType 2.13.3 and the locked pairing
-  library using their repository scripts. These builds succeeded on macOS.
-- Configure `wine/build-macos` with `--enable-win64 --without-x --disable-tests
-  --enable-winegstreamer`, `ac_cv_func_pipe2=no`, and llvm-mingw on PATH. The
-  host configure probe otherwise enables the newer pipe2 API, unavailable on the
-  tested older iPad OS; disabling that feature selects Wine's existing portable
-  pipe/fcntl fallback without a source patch. Generate the `include/*.h`
-  targets in its Makefile before running the native Wine scripts. The wineserver
-  script patches an existing base archive: on a clean checkout, first compile
-  the Wine `server/Makefile.in` source list using the same iOS flags and shims in
-  `build/wineserver/build.sh`, archive those objects into
-  `build/wineserver/obj/libwineserver.a`, then run that script's normal patch and
-  symbol-renaming pass. The generic bootstrap recipe used for this validation
-  came from commit `f4c9a17` (`build/wineserver/bootstrap-base.sh`); no OpenGL or
-  pipe compatibility source changes were imported.
-- LLVM source was pinned to `8dfdcc7b7bf66834a761bd8de445840ef68e4d1a`. Build a
-  Release host `llvm-tblgen`, then the iOS libraries with that tool. In addition
-  to the options above, use `LLVM_NO_DEAD_STRIP=ON` to avoid old AddLLVM selecting
-  Linux `--gc-sections` for iOS, disable zstd/terminfo/libedit, and supply
-  `CMAKE_POLICY_VERSION_MINIMUM=3.5` for current CMake. No LLVM source edit is
-  required. Build the library targets listed by `llvm_deps` in
-  `dxmt/src/airconv/meson.build`; unused LLVM tools/backends are unnecessary.
-- Generate `air_msad.h`, `air_samplepos.h` and `air_tessellation.h` from the
-  corresponding DXMT shaders with its Meson Metal/xxd pipeline. The native build
-  script does not generate them or add their output directory to airconv's
-  include flags. Use `-std=metal3.1 --target=air64-apple-macos14.0`, then
-  `xxd -n <basename> -i <input.air> <output.h>`. Compile `airconv_context.cpp`
-  with the generated-header directory on its include path. The newer Metal
-  compiler rejected the tessellation intrinsic's argument count; installed Metal
-  `32023.883` compiled the unmodified shader successfully.
-- Combine the 87 DXMT objects and its 34 declared LLVM archives with
-  `xcrun -sdk iphoneos libtool -static` into `libdxmt_combined.a`, and copy it to
-  `app/Madeira`. The script only refreshes that combined archive if it exists.
-- Build and stage `build/madeira-dock/build.sh --check` before packaging. A
-  successful Xcode link does not guarantee this ignored output is present:
-  without `arm64ec-windows/dockhost.exe`, the app hides the Steam library.
-  Check the final bundle for the executable and `dock-notices.txt`. For 32-bit
-  games, also verify `i386-windows/ntdll.dll` and the WoW64 components described
-  above; an empty resource directory is insufficient. The full
-  `build/wine-i386/build.sh` subsequently built the Wine farm and DXMT PE
-  components on macOS with Bison 3, llvm-mingw and Meson available.
-- Run `build/stage-licenses.sh` before the app build. Use
-  `MTL_LANGUAGE_REVISION=Metal31` for the app's shaders on the tested older iPad OS.
-  The app links as iOS 17 while DXMT's existing script targets iOS 18; the linker
-  warns about this mismatch. This build does not establish iOS 17 compatibility.
-
-The signing team, bundle identifier and display name were isolated test-build
-settings. Native source linking replaces the earlier frontend-only diagnostic
-build; device validation still needs to exercise this exact implementation.
+The pinned llvm-mingw toolchain is now available for the controlled Windows
+fixture. Other native inputs are still absent. A reproducible mixed-source route
+is documented in [tests/device/ssd-runtime/README.md](../tests/device/ssd-runtime/README.md):
+`FRONTEND=source` compiles the checkout's 65 Swift sources against the hash-pinned
+published runtime. Three hidden native entry points forward to verified original
+implementations; no runtime instructions are changed. Source hashes, native input
+hashes and output hashes are recorded. This route compiled, signed, installed in
+the isolated SSD app, and opened its interface on iPad. Native bridge changes
+remain outside that binary and are separately host/syntax-tested. The test build
+uses a scoped C: alias for direct-launch CWD and refuses external direct 32-bit
+starts. Do not describe it as a complete source build.

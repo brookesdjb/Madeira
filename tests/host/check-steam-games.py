@@ -79,8 +79,8 @@ require('@ObservedObject private var steam = SteamOwnedLibrary.shared' in detail
         'SteamTransferControls(appID: appID, download: download,' in detail and
         'SteamDownloadStatus(download: download)' in detail,
         'Game details observes transfers and replaces Play with transfer controls and progress')
-require('SteamTransferControls(' not in steam_section and 'SteamDownloadStatus(' not in steam_section,
-        'Steam section does not duplicate the header transfer controls or progress')
+require('SteamTransferControls(appID: appID, download: download, storageUnavailable: storageUnavailable)' in steam_section,
+        'Steam section shares transfer controls with the header')
 
 require('SteamEntrySection(entry: $entry)' in detail and 'if entry.steamAppID != nil {' in detail,
         'Game details: the Steam section for a Steam game')

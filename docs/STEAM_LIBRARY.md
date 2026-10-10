@@ -54,8 +54,8 @@ The page has, in this order:
   under Madeira Dock, **Smaller JIT pool (512 MB) for this launch** (Dock's
   per-launch choice) and **One-time installs**, **Run at next start** or
   **Skip** (Dock's choice for the game's Steam install scripts, when it has
-  any); under The game, **Program**; **Update available — download** when no
-  transfer is pending; **Repair installed files**; App ID; free
+  any); under The game, **Program**; an update's progress with **Pause download** / **Resume download**,
+  or **Update available — download**; **Repair installed files**; App ID; free
   space; the last Dock result; **Uninstall** (with a confirmation);
 - **Display**, **Compatibility & performance** (reduced-precision x87,
   **CPU cores reported**, **D3D9 anisotropic filtering**), **On screen** and
@@ -452,7 +452,7 @@ network request is reported as a network error when the SSD is still accessible,
 and pausing does not mark the SSD disconnected. Updates use Pause/Resume rather
 than the first-install cancellation prompt that deletes partial files.
 
-The game-details header shows transfer controls while a
+The game-details header and Steam section both show transfer controls while a
 download or update remains pending. Paused progress includes completed and total
 bytes, with a small display snapshot stored internally across app restarts; the
 SSD's journals and chunk checks remain authoritative. Older paused records need
@@ -467,5 +467,10 @@ files' logical length from allocated blocks. A successful space check is not a
 guarantee that all writes will succeed; filesystem errors still stop the operation
 and retain its resumable data.
 
-See [EXTERNAL_STORAGE.md](EXTERNAL_STORAGE.md) for the storage and mapping
-contracts, test commands, device evidence and remaining validation gaps.
+See [EXTERNAL_STORAGE.md](EXTERNAL_STORAGE.md) for exact build/provenance and
+validation. The source integration is installed in an isolated diagnostic app;
+controlled external execution, Steam SSD downloads, and Brotato and Borderlands
+GOTY gameplay through Dock have passed. The remaining physical failure matrix is still pending. The
+mixed build uses a prebuilt native runtime and a scoped C: compatibility alias
+for Valve's library registration, Dock's expected path and direct-launch working
+directory; it is not a full native source build.

@@ -581,15 +581,19 @@ struct LibraryEntry: Codable, Identifiable {
             // The game's own Steam identity (SteamAppId, SteamGameId, SteamAppPath = its install
             // folder) instead of the bridge's fixed one.
             setenv("MADEIRA_STEAM_APPID", String(steamAppID), 1)
-            let appPath = storageID != "internal"
-                ? SteamStoragePath.externalWindowsRoot + "\\" + relativePath.replacingOccurrences(of: "/", with: "\\") : windowsPath
+            let appPath = storageID != "internal" && Bundle.main.object(forInfoDictionaryKey: "MadeiraUsesPrebuiltNativeBridge") as? Bool == true
+                ? "C:\\MadeiraExternalLibrary\\" + relativePath.replacingOccurrences(of: "/", with: "\\") : windowsPath
             setenv("MADEIRA_STEAM_APPPATH", appPath, 1)
         }
         // ml1163: a game starts in launchDirectory (a chosen folder, Steam's for "The game",
         // else the program's own). It is exported when the bridge's default, the folder of
         // what it starts, differs: explorer.exe (desktop mode) and cmd.exe (a .bat, the
         // services batch) live elsewhere. The Desktop entry keeps explorer's default.
-        if desktop != true, launchDirectory != Self.folder(of: command.exe) {
+        if desktop != true, storageID != "internal", Bundle.main.object(forInfoDictionaryKey: "MadeiraUsesPrebuiltNativeBridge") as? Bool == true,
+           launchDirectory.lowercased().hasPrefix("e:\\") {
+            let compatible = "C:\\MadeiraExternalLibrary\\" + launchDirectory.dropFirst(3)
+            setenv("MADEIRA_WORKDIR", compatible, 1)
+        } else if desktop != true, launchDirectory != Self.folder(of: command.exe) {
             setenv("MADEIRA_WORKDIR", launchDirectory, 1)
         }
         // Every session's virtual monitor takes this entry's Resolution
@@ -1009,7 +1013,7 @@ final class LibraryModel: ObservableObject {
         quitRequested = false
         LibraryController.shared.configure(enabled: enabled, ownsInput: false)
         Self.sessionsThisRun += 1
-        launchPresent = madeira_get_present_count(); launchStarted = Date(); launchSlow = false; launchLogs = entry.liveLogs
+        launchPresent = madeira_frame_count(); launchStarted = Date(); launchSlow = false; launchLogs = entry.liveLogs
         launchSurface = winios_surface_present_count()
         MetalBackedView.presentCountAtLaunch = launchPresent; laidOutAfterFirstPresent = false
         launching = true; overlayFields = entry.overlayFields ?? ["FPS", "Frame time", "RAM", "Battery"]
@@ -1049,12 +1053,12 @@ final class LibraryModel: ObservableObject {
         if dockStart.active {
             // A Dock start: the desktop's own frames (explorer, the host's console window)
             // do not end this starting screen; the game's window does (DockStartScreen).
-            dockStart.poll(self, rendered: madeira_get_present_count() >= launchPresent + 3)
+            dockStart.poll(self, rendered: madeira_frame_count() >= launchPresent + 3)
         }
         if dockStart.holding {
             if launching && !launchSlow && Date().timeIntervalSince(launchStarted) > 30 { launchSlow = true }
         } else if launching {
-            if madeira_get_present_count() >= launchPresent + 3 {
+            if madeira_frame_count() >= launchPresent + 3 {
                 showGameView(reason: "present")
             } else if winios_surface_present_count() > launchSurface {
                 showGameView(reason: "surface")
@@ -1065,7 +1069,7 @@ final class LibraryModel: ObservableObject {
             if sessionMessage == "Starting…" { sessionMessage = "" }
         } else if sawProcess && wineserver_is_running() == 0 { finish() }
         // The first frame gives Aspect and Fill height the drawable's shape.
-        if current != nil, !laidOutAfterFirstPresent, madeira_get_present_count() != MetalBackedView.presentCountAtLaunch {
+        if current != nil, !laidOutAfterFirstPresent, madeira_frame_count() != MetalBackedView.presentCountAtLaunch {
             laidOutAfterFirstPresent = true
             MetalBackedView.refreshDisplayMode(reason: "first-present")
         }
@@ -2602,6 +2606,11 @@ struct LibraryView: View {
             if settingsShow("SSD", "storage", "external", "library") {
                 Section("Storage") { NavigationLink("Game storage") { SteamStorageSettings() } }
             }
+            if MadeiraConfig.flag("MADEIRA_EXTERNAL_STORAGE_PROBE", fallback: false), settingsShow("SSD", "storage", "external") {
+                Section("Storage diagnostics") {
+                    NavigationLink("External SSD access probe") { SteamStorageProbeView() }
+                }
+            }
             if settingsShow(".NET", "Mono", "Wine Mono", "framework", "download") { WineMonoSettingsSection() }
             if settingsShow("saves", "backup", "restore", "save games") { SavesSection() }
             if settingsShow("appearance", "liquid metal", "metal", "glass") {
@@ -2958,22 +2967,22 @@ struct LibraryDetail: View {
                                     storageUnavailable: entry.storageID != "internal" && storage.availability != .available)
                                 SteamDownloadStatus(download: download)
                             } else {
-                                Button(action: start) {
-                                    HStack(spacing: 10) {
-                                        // Enabling JIT can take seconds with nothing else on screen.
-                                        if entry.storageID != "internal", storage.availability != .available {
-                                            Image(systemName: "externaldrive.badge.exclamationmark")
-                                            Text("SSD unavailable").fontWeight(.semibold)
-                                        } else if model.startingJIT == entry.id {
-                                            ProgressView().tint(.white)
-                                            Text("Starting JIT").fontWeight(.semibold)
-                                        } else {
-                                            Image(systemName: "play.fill"); Text("Play").fontWeight(.semibold)
-                                        }
-                                    }.frame(minWidth: 100, minHeight: 30)
-                                }
-                                .buttonStyle(LibraryPlayStyle(pending: leaving))
-                                .disabled(leaving || (entry.storageID != "internal" && storage.availability != .available))
+                            Button(action: start) {
+                                HStack(spacing: 10) {
+                                    // Enabling JIT can take seconds with nothing else on screen.
+                                    if entry.storageID != "internal", storage.availability != .available {
+                                        Image(systemName: "externaldrive.badge.exclamationmark")
+                                        Text("SSD unavailable").fontWeight(.semibold)
+                                    } else if model.startingJIT == entry.id {
+                                        ProgressView().tint(.white)
+                                        Text("Starting JIT").fontWeight(.semibold)
+                                    } else {
+                                        Image(systemName: "play.fill"); Text("Play").fontWeight(.semibold)
+                                    }
+                                }.frame(minWidth: 100, minHeight: 30)
+                            }
+                            .buttonStyle(LibraryPlayStyle(pending: leaving))
+                            .disabled(leaving || (entry.storageID != "internal" && storage.availability != .available))
                             }
                             if entry.storageID != "internal", storage.availability != .available {
                                 Button { Task { await storage.check() } } label: {
@@ -2985,14 +2994,7 @@ struct LibraryDetail: View {
                                 Text(storage.problem ?? "Reconnect the SSD before playing.").font(.footnote)
                                 Button("Storage options") { showStorage = true }
                                     .buttonStyle(.borderless)
-                                    .sheet(isPresented: $showStorage) {
-                                        NavigationStack {
-                                            SteamStorageSettings()
-                                                .toolbar { ToolbarItem(placement: .confirmationAction) {
-                                                    Button("Done") { showStorage = false }
-                                                } }
-                                        }
-                                    }
+                                    .sheet(isPresented: $showStorage) { NavigationStack { SteamStorageSettings() } }
                             }
                         }
                     }.padding(.vertical, 24)
@@ -4212,13 +4214,13 @@ struct LibraryMetrics: View {
             .font(.caption.monospacedDigit().weight(.medium)).padding(.horizontal, 12).padding(.vertical, 8)
             .background(.black.opacity(0.8), in: Capsule()).foregroundStyle(.white)
             .onAppear {
-                lastCount = madeira_get_present_count(); lastTime = Date(); UIDevice.current.isBatteryMonitoringEnabled = true
+                lastCount = madeira_frame_count(); lastTime = Date(); UIDevice.current.isBatteryMonitoringEnabled = true
                 applyGPUMeter()
             }
             .onDisappear { UIDevice.current.isBatteryMonitoringEnabled = false; madeira_gpu_meter_enable(0) }
             .onChange(of: model.overlayFields) { _, _ in applyGPUMeter() }
             .onReceive(ticks) { now in
-                let count = madeira_get_present_count(); let dt = now.timeIntervalSince(lastTime)
+                let count = madeira_frame_count(); let dt = now.timeIntervalSince(lastTime)
                 let frames = count >= lastCount ? count - lastCount : 0
                 fps = Double(frames) / max(0.001, dt); lastCount = count; lastTime = now
                 var info = task_vm_info_data_t(); var size = mach_msg_type_number_t(MemoryLayout<task_vm_info_data_t>.size / MemoryLayout<natural_t>.size)

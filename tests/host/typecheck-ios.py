@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Copyright 2026 David Brookes
+# Copyright 2026 125hz
 # Madeira Converter Exception: see LICENSE-EXCEPTION.md
 """Type-check Madeira's actual Swift source list without linking native archives.
 

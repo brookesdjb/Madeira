@@ -1,6 +1,6 @@
 #!/bin/bash
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Copyright 2026 David Brookes
+# Copyright 2026 125hz
 # Madeira Converter Exception: see LICENSE-EXCEPTION.md
 set -euo pipefail
 probe_dir="$(cd "$(dirname "$0")" && pwd)"

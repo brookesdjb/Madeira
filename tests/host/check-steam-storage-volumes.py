@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Copyright 2026 David Brookes
 # Madeira Converter Exception: see LICENSE-EXCEPTION.md
 """Production storage helpers on disposable macOS APFS and exFAT images.
 

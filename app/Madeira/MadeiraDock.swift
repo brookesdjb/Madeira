@@ -37,14 +37,14 @@ struct DockGame: Identifiable, Equatable, Sendable {
     var storageID: String = "internal"
     var storageAvailable = true
 
-    /// Canonical Wine path of the game folder, used for direct starts and installers.
+    /// Windows path of the game's folder, which Dock requires Valve's client to resolve to.
     var windowsInstallPath: String {
         (storageID == "internal" ? "C:\\" : "E:\\") + (library + "/common/" + installDir).replacingOccurrences(of: "/", with: "\\")
     }
 
-    var clientInstallPath: String {
-        if storageID != "internal" {
-            return SteamStoragePath.externalWindowsRoot + "\\" + windowsInstallPath.dropFirst(3)
+    func clientInstallPath(compatibilityAlias: Bool) -> String {
+        if storageID != "internal", compatibilityAlias {
+            return "C:\\MadeiraExternalLibrary\\" + windowsInstallPath.dropFirst(3)
         }
         return windowsInstallPath
     }
@@ -444,14 +444,14 @@ enum MadeiraDock {
     }
 
     /// The host's environment for one launch.
-    static func configure(_ game: DockGame, launchOption: UInt32 = 0) {
+    static func configure(_ game: DockGame, launchOption: UInt32 = 0, compatibilityAlias: Bool = false) {
         for key in ["MADEIRA_STEAM_HOST_PROBE", "MADEIRA_STEAM_HOST_SESSION", "MADEIRA_STEAM_HOST_LOGIN", "MADEIRA_STEAM_HOST_LAUNCH"] {
             setenv(key, "1", 1)
         }
         setenv("MADEIRA_STEAM_HOST_APPID", String(game.id), 1)
         setenv("MADEIRA_STEAM_HOST_LAUNCH_OPTION", String(launchOption), 1)
         setenv("MADEIRA_STEAM_HOST_CLIENT_DIR", SteamRuntimeFiles.windowsRoot, 1)
-        setenv("MADEIRA_STEAM_HOST_EXPECTED_INSTALL", game.clientInstallPath, 1)
+        setenv("MADEIRA_STEAM_HOST_EXPECTED_INSTALL", game.clientInstallPath(compatibilityAlias: compatibilityAlias), 1)
         setenv("MADEIRA_STEAM_HOST_LOG", "C:\\madeira-dock.txt", 1)
         // The install record lists per-user executables: Dock asks Valve's client to prepare
         // them before it launches. env.MADEIRA_DOCK_CEG = 0 never asks.

@@ -182,7 +182,7 @@ final class MetalBackedView: UIView {
     /// presented into it (before that it is the 800x600 seed or the last
     /// session's size, and Aspect would letterbox against the wrong shape).
     private func drawableAspect() -> CGSize {
-        guard madeira_get_present_count() != Self.presentCountAtLaunch else { return .zero }
+        guard madeira_frame_count() != Self.presentCountAtLaunch else { return .zero }
         let d = MetalHostView.shared.metalLayer.drawableSize
         return (d.width > 0 && d.height > 0) ? d : .zero
     }
@@ -2583,6 +2583,10 @@ struct ContentView: View {
         }
         let storageRoot = entry.storageID == "internal" ? nil : SteamStorageModel.shared.sessionAccess?.root
         do {
+            if entry.storageID != "internal", entry.bits == 32,
+               Bundle.main.object(forInfoDictionaryKey: "MadeiraUsesPrebuiltNativeBridge") as? Bool == true {
+                throw LibraryError.message("This test runtime cannot start a 32-bit program directly from the SSD.")
+            }
             if entry.desktop != true { _ = try LibraryModel.executable(entry.launchRelativePath, root: storageRoot) }
             try entry.validate(storageRoot: storageRoot)
         }
@@ -3250,7 +3254,7 @@ struct ContentView: View {
                 // loop actually observes so that can't happen silently again.
                 if now - lastHeartbeat > 30 {
                     lastHeartbeat = now
-                    logStore.log("detach-wait: presents=\(madeira_get_present_count()) running=\(wine_process_is_running()) elapsed=\(Int(now - pollStart))s")
+                    logStore.log("detach-wait: presents=\(madeira_frame_count()) running=\(wine_process_is_running()) elapsed=\(Int(now - pollStart))s")
                 }
                 // Task #25: the present heuristic is meaningless in desktop
                 // mode — ANY child presenting (cube, a game window) trips it
@@ -3259,7 +3263,7 @@ struct ContentView: View {
                 // attached until the desktop exits (or the safety cap).
                 let isDesktopSession = getenv("MADEIRA_DESKTOP").map { $0.pointee == 49 } ?? false
                 if !isDesktopSession {
-                    if presentingSince == nil && madeira_get_present_count() >= 1 {
+                    if presentingSince == nil && madeira_frame_count() >= 1 {
                         presentingSince = now
                         logStore.log("Game is presenting (#1, splash) — early detach in \(Int(settleAfterFirstPresent))s")
                     }
@@ -3378,7 +3382,8 @@ struct ContentView: View {
                 }
                 try MadeiraDock.writeHandoff(account: signIn.accountName, token: signIn.refreshToken, appID: game.id)
             } catch { fail(error); return }
-            MadeiraDock.configure(game, launchOption: launchOption)
+            MadeiraDock.configure(game, launchOption: launchOption,
+                                  compatibilityAlias: Bundle.main.object(forInfoDictionaryKey: "MadeiraUsesPrebuiltNativeBridge") as? Bool == true)
             // The game's one-time installs (its Steam install script) run first, in the same
             // session. No session runs yet, so the registry files can be read and written.
             DockInstallers.prepare(game, drive: MadeiraDock.drive, prefix: MadeiraDock.prefix, externalRoot: storageRoot)

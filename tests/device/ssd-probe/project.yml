@@ -14,8 +14,8 @@ targets:
     sources:
       - App.swift
       - ../../../app/Madeira/SteamStorage.swift
-      - SteamStorageProbe.swift
-      - SteamStorageProbeView.swift
+      - ../../../app/Madeira/SteamStorageProbe.swift
+      - ../../../app/Madeira/SteamStorageProbeView.swift
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: org.madeira.ssd-probe

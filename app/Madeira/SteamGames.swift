@@ -857,7 +857,7 @@ struct SteamDownloadStatus: View {
     }
 }
 
-/// Transfer actions in the game-details header.
+/// Shared by the game-details header and its Steam section.
 struct SteamTransferControls: View {
     let appID: Int
     let download: SteamOwnedLibrary.Download
@@ -1283,7 +1283,10 @@ struct SteamEntrySection: View {
                     }.pickerStyle(.menu)
                 }
             }
-            if download == nil, downloads, steam.updateAvailable(appID: appID, installedBuild: games.builds[appID]) {
+            if let download {
+                SteamDownloadStatus(download: download)
+                SteamTransferControls(appID: appID, download: download, storageUnavailable: storageUnavailable)
+            } else if downloads, steam.updateAvailable(appID: appID, installedBuild: games.builds[appID]) {
                 Button { steam.install(appID) } label: { Label("Update available — download", systemImage: "arrow.down.circle") }
                     .disabled(!steam.signedIn || storageUnavailable)
             }

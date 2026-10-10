@@ -484,15 +484,22 @@ credentials:
 
 ## External storage
 
-The app registers the selected SSD folder with Valve's client through the owned
-`C:\MadeiraExternalLibrary` alias. Dock receives that same path as its expected
-install location. The tested Valve client rejected a standalone E: library as
-unmounted; the alias uses the existing C: mount without copying the payload.
-Authentication, entitlement and expected-install-path checks remain unchanged.
+The current pinned source is `72558e416a390f3669457930f09a389e54f49556`.
+Its `src/launch.c` validates the normalized actual install path against the host's
+expected path without restricting the drive letter to C:. External games use
+`E:\steamapps\common\<folder>`. The app validates the saved folder identity,
+retains coordinated scoped access through the session, registers E: in Steam's
+libraryfolders metadata and passes that E: install path to Dock. Installer lookup
+uses the same external root; the registry and generated installer scripts remain
+internal. Disconnected records are retained and require access before launch.
 
-E: points to the same registered root for direct Wine launches and installer
-paths. The app validates the folder identity and holds coordinated security-scoped
-access through the session. Installer data comes from the SSD; generated scripts,
-registry and Steam client remain internal. Disconnected records stay visible.
-See [EXTERNAL_STORAGE.md](EXTERNAL_STORAGE.md) for lifecycle and test coverage,
-including the distinction between host checks and mixed-runtime device evidence.
+The controlled Windows EXE/DLL/relative-asset/save fixture and an actual Steam
+SSD download passed on iPad. The preserved binary's Valve client rejected E:
+as unmounted and Dock returned 41. The mixed-source diagnostic build therefore
+registers the scoped `C:\MadeiraExternalLibrary` alias and passes that identical
+install path to Dock. The path check and Valve's licence/authentication gates
+are unchanged; no game payload is copied internally. The user confirmed gameplay
+through the alias; Dock reported the expected install verified, client error 0
+and game running. Full-source native E: client registration, restart/reconnect,
+and one-time installer execution still need physical validation. See [EXTERNAL_STORAGE.md](EXTERNAL_STORAGE.md)
+for the mixed-source build's native-bridge limitations and validation ledger.

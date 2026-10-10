@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// Copyright 2026 David Brookes
+// Copyright 2026 125hz
 // Madeira Converter Exception: see LICENSE-EXCEPTION.md
 
 import Foundation
@@ -237,12 +237,9 @@ enum SteamStorageMapping {
     }
 }
 
-/// Paths within a registered game library.
+/// Shared by the device prototype and future install/launch integration.
 /// Callers must keep external access and coordination active while using URLs.
 enum SteamStoragePath {
-    static let externalAlias = "MadeiraExternalLibrary"
-    static let externalWindowsRoot = "C:\\" + externalAlias
-
     static func components(_ relative: String) throws -> [String] {
         let normalized = relative.replacingOccurrences(of: "\\", with: "/")
         let parts = normalized.split(separator: "/", omittingEmptySubsequences: false).map(String.init)

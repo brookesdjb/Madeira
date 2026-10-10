@@ -796,55 +796,16 @@ func storageChecks() throws {
     require(foldersRecord["libraryfolders"]?.fields.count == 3 && foldersRecord["unknown"]?.string == "preserved" &&
             foldersRecord["libraryfolders"]?["1"]?["custom"]?.string == "keep",
             "storage: Steam registration preserves other libraries and unknown fields")
-    require(foldersRecord["libraryfolders"]?["2"]?["path"]?.string == "C:\\MadeiraExternalLibrary" &&
+    require(foldersRecord["libraryfolders"]?["2"]?["path"]?.string == "E:\\" &&
             foldersRecord["libraryfolders"]?["2"]?["apps"]?["55"]?.string == "5678",
-            "storage: Steam registration updates one stable scoped alias entry")
-    let registeredFolders = try Data(contentsOf: foldersFile)
-    try Data(#"""
-    "libraryfolders" { "0" { "path" "E:\\" "custom" "unrelated" } }
-    """#.utf8).write(to: foldersFile)
-    try SteamLibraryFolders.register(externalID: id, name: "SSD", apps: [:], drive: internalDrive)
-    var foreignParser = try SteamKeyValues(Data(contentsOf: foldersFile))
-    let foreignRecord = try foreignParser.read()
-    require(foreignRecord["libraryfolders"]?["0"]?["path"]?.string == "E:\\" &&
-            foreignRecord["libraryfolders"]?["0"]?["custom"]?.string == "unrelated" &&
-            foreignRecord["libraryfolders"]?["1"]?["path"]?.string == "C:\\MadeiraExternalLibrary",
-            "storage: registering SSD leaves an unrelated E library untouched")
-    let unownedAlias = Data(#"""
-    "libraryfolders" { "0" { "path" "C:\\MadeiraExternalLibrary" } }
-    """#.utf8)
-    try unownedAlias.write(to: foldersFile)
-    var aliasRefused = false
-    do { try SteamLibraryFolders.register(externalID: id, name: "SSD", apps: [:], drive: internalDrive) }
-    catch { aliasRefused = true }
-    require(aliasRefused && (try? Data(contentsOf: foldersFile)) == unownedAlias,
-            "storage: registration refuses an unowned alias without changing its metadata")
-    do {
-        try SteamLibraryFolders.register(externalID: id, name: "SSD", apps: [:], drive: internalDrive,
-                                         verifiedAliasOwnerID: UUID().uuidString)
-        require(false, "storage: mismatched private ownership refuses alias recovery")
-    } catch { require((try? Data(contentsOf: foldersFile)) == unownedAlias,
-                      "storage: mismatched ownership preserves metadata") }
-    for _ in 0..<2 {
-        // Simulate Steam rewriting the file after each successful game session.
-        try unownedAlias.write(to: foldersFile)
-        try SteamLibraryFolders.register(externalID: id, name: "SSD", apps: [55: 5678], drive: internalDrive,
-                                         verifiedAliasOwnerID: id)
-        var recoveredParser = try SteamKeyValues(Data(contentsOf: foldersFile))
-        let recovered = try recoveredParser.read()["libraryfolders"]
-        require(recovered?.fields.count == 1 && recovered?["0"]?["madeira_library_id"]?.string == id &&
-                recovered?["0"]?["apps"]?["55"]?.string == "5678",
-                "storage: verified ownership restores Steam-rewritten alias without duplicating it")
-    }
-    let foreignAlias = Data(("\"libraryfolders\" { \"0\" { \"path\" \"C:\\\\MadeiraExternalLibrary\" \"madeira_library_id\" \"" + UUID().uuidString + "\" } }").utf8)
-    try foreignAlias.write(to: foldersFile)
-    do {
-        try SteamLibraryFolders.register(externalID: id, name: "SSD", apps: [:], drive: internalDrive,
-                                         verifiedAliasOwnerID: id)
-        require(false, "storage: explicit foreign identity always refuses alias recovery")
-    } catch { require((try? Data(contentsOf: foldersFile)) == foreignAlias,
-                      "storage: explicit foreign identity preserves metadata") }
-    try registeredFolders.write(to: foldersFile)
+            "storage: Steam registration updates one stable E library entry")
+    try SteamLibraryFolders.register(externalID: id, name: "SSD", apps: [55: 5678], drive: internalDrive, compatibilityAlias: true)
+    var aliasParser = try SteamKeyValues(Data(contentsOf: foldersFile))
+    let aliasRecord = try aliasParser.read()
+    require(aliasRecord["libraryfolders"]?.fields.count == 3 &&
+            aliasRecord["libraryfolders"]?["2"]?["path"]?.string == "C:\\MadeiraExternalLibrary" &&
+            aliasRecord["libraryfolders"]?["2"]?["apps"]?["55"]?.string == "5678",
+            "storage: compatibility alias replaces the same library without duplicating its payload")
     let externalApps = external.appendingPathComponent("steamapps")
     try fm.createDirectory(at: externalApps, withIntermediateDirectories: true)
     try Data(#"""
@@ -1467,7 +1428,7 @@ try:
                   steam / 'Content/ContentDecryptor.swift', steam / 'Content/DepotManifest.swift',
                   steam / 'Library/SteamAppInfo.swift', steam / 'Library/SteamLibraryFetcher.swift',
                   steam / 'Install/AppManifestWriter.swift', app / 'SteamInstall.swift', app / 'SteamStorage.swift', app / 'SteamKeyValues.swift']
-    if apple: production.append(root / 'tests/device/ssd-probe/SteamStorageProbe.swift')
+    if apple: production.append(app / 'SteamStorageProbe.swift')
     exe = work / 'check'
     build = subprocess.run([SWIFTC, '-parse-as-library', '-swift-version', '5', '-sanitize=address', '-g', '-o', str(exe),
                             '-I', str(shim / 'CommonCrypto'), '-I', str(shim / 'Compression'), '-I', str(shim / 'zlib'),

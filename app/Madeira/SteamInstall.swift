@@ -33,11 +33,7 @@ enum SteamInstallPaths {
 /// running. Preserve existing libraries and unknown fields; refuse malformed
 /// metadata instead of replacing it with an empty document.
 enum SteamLibraryFolders {
-    /// verifiedAliasOwnerID comes from Madeira's private prefix record, after the
-    /// caller validates the SSD marker and both filesystem mappings. Steam can
-    /// rewrite libraryfolders.vdf without preserving our custom ownership field.
-    static func register(externalID: String, name: String, apps: [Int: Int64], drive: URL,
-                         verifiedAliasOwnerID: String? = nil) throws {
+    static func register(externalID: String, name: String, apps: [Int: Int64], drive: URL, compatibilityAlias: Bool = false) throws {
         guard UUID(uuidString: externalID) != nil else { throw SteamStorageError.invalidRecord }
         let file = try SteamStoragePath.native(SteamInstallPaths.libraryRelative + "/libraryfolders.vdf", root: drive)
         var root: [String: SteamValue] = [:]
@@ -52,22 +48,16 @@ enum SteamLibraryFolders {
             folders["0"] = .object(["path": .text("C:\\Program Files (x86)\\Steam"), "apps": .object([:])])
         }
         let owned = folders.first { $0.value["madeira_library_id"]?.string == externalID }?.key
-        let existingAlias = folders.first {
+        let existingE = folders.first {
             let path = $0.value["path"]?.string?.trimmingCharacters(in: CharacterSet(charactersIn: "\\/")).lowercased()
-            return path == SteamStoragePath.externalWindowsRoot.lowercased()
+            return path == "e:" || path == "c:\\madeiraexternallibrary"
         }?.key
-        // Recover a Steam-rewritten entry only with independent, verified
-        // ownership. An explicit different ID or an unrelated E: stays untouched.
-        if let existingAlias, owned != existingAlias {
-            guard owned == nil,
-                  folders[existingAlias]?["madeira_library_id"] == nil,
-                  verifiedAliasOwnerID == externalID else {
-                throw SteamStorageError.mappingConflict
-            }
+        if let existingE, owned != existingE, folders[existingE]?["madeira_library_id"]?.string != nil {
+            throw SteamStorageError.unavailable(.identityMismatch)
         }
-        let key = owned ?? existingAlias ?? String((folders.keys.compactMap(Int.init).max() ?? 0) + 1)
+        let key = owned ?? existingE ?? String((folders.keys.compactMap(Int.init).max() ?? 0) + 1)
         var entry = folders[key]?.fields ?? [:]
-        entry["path"] = .text(SteamStoragePath.externalWindowsRoot)
+        entry["path"] = .text(compatibilityAlias ? "C:\\MadeiraExternalLibrary" : "E:\\")
         entry["label"] = .text(name)
         entry["madeira_library_id"] = .text(externalID)
         entry["apps"] = .object(Dictionary(uniqueKeysWithValues: apps.map { (String($0.key), .text(String(max(0, $0.value)))) }))
