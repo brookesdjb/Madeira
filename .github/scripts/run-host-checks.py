@@ -16,6 +16,7 @@ ROOT = Path(__file__).resolve().parents[2]
 
 # Checks that cannot run on a Linux runner, and why.
 NEEDS = {
+    'check-ios-cache.py': 'Objective-C Foundation framework (Apple platforms only)',
     'check-request-wake.py': 'Mach semaphores (Apple platforms only)',
     'check-wma-decoder.py': 'a configured Wine build tree (MADEIRA_WINE_BUILD)',
     'check-wine-mono.py': 'xcrun (macOS)',
