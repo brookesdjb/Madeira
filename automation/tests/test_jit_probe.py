@@ -148,8 +148,10 @@ def test_probe_source_is_double_compile_gated_and_runtime_opt_in():
     path = Path(__file__).resolve().parents[2] / "app/Madeira/ContentView.swift"
     source = path.read_text()
     marker = "#if DEBUG && MADEIRA_AUTOMATION"
-    assert source.count(marker) == 7
-    declaration = source[source.rindex(marker):]
+    assert source.count(marker) >= 7
+    probe = source.index("@MainActor final class AutomationProbe")
+    assert source[:probe].rstrip().endswith(marker)
+    declaration = source[probe:]
     assert 'arguments.contains("--madeira-automation")' in declaration
     assert declaration.rstrip().endswith("#endif")
     assert "run() // Existing ContentView.runFEXTest" in declaration
