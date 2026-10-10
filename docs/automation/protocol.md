@@ -205,5 +205,12 @@ Validation for this change: the actual Swift listener runs on macOS against
 host-only probe/replay stand-ins, checking fragmented frames, authentication,
 limits, controller exclusivity, expiry, disconnect cleanup and 1100 snapshots.
 Host tests do not prove iPad forwarding, real replay cleanup or Wi-Fi/JIT
-coexistence. The iPad was left untouched while the owner installed another game;
-physical command/capture verification remains pending.
+coexistence. Physical USB follow-up on an M5 iPad/iPadOS 26.7 passed
+authenticated snapshots, JIT bootstrap, Rise of the Tomb Raider launch and
+keyboard menu replay. A 10-second menu trace exported 599 samples with zero
+loss and matching process metadata. Closing the socket during a neutral replay
+produced TRANSPORT_DISCONNECTED while the game stayed running. A socket-started
+built-in benchmark completed; this proves delivery, not a performance gain.
+Wi-Fi, independent held-key release and observer overhead remain unverified.
+Custom socket-only waits need an adequate bounded Appium idle timeout (see
+setup.md); a three-minute default expired before a benchmark-result screenshot.
