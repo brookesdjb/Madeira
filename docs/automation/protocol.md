@@ -65,7 +65,8 @@ accepted. Appium's existing paired XCTest session remains the transport.
 
 The opted-in panel is hosted in the existing controls window above the raw
 Metal surface. Its measured rectangle owns its touches even during startup;
-the remaining game surface keeps the normal input routing. Normal builds omit
+the remaining game surface keeps the normal input routing. The host dismisses
+the system keyboard before tapping Send. Normal builds omit
 this overlay and its hit-test branch. The host waits up to 15 seconds for the
 matching reply across screen transitions. It never resends a request after
 Send; an unavailable reply reports that the request may already have run.

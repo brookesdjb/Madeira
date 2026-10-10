@@ -27,6 +27,9 @@ def command(device, operation, *, library_id=None, steam_app_id=None, request_id
     element = device.find("madeira.automation.command")
     device.call("POST", f"/element/{element}/clear", {})
     device.text("madeira.automation.command", json.dumps(request, separators=(",", ":")))
+    # The controls window deliberately keeps the game's viewport unchanged;
+    # dismiss the system keyboard so its bottom command row is hittable.
+    device.call("POST", "/appium/device/hide_keyboard", {})
     device.tap_id("madeira.automation.send-command")
     # Launch replaces the library view and may briefly invalidate XCTest's
     # elements. Poll only the correlated reply: never resend a mutation.
