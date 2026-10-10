@@ -1,4 +1,4 @@
-# Experimental XCTest protocols
+# Experimental automation protocols
 
 ## Status and JIT probe v1
 
@@ -8,10 +8,10 @@ private existing launch/test closures without changing the Xcode source manifest
 
 Activation requires `DEBUG && MADEIRA_AUTOMATION` at compile time AND the process
 argument `--madeira-automation`. The default build command does not add the test
-flag. The Release configuration does not define DEBUG. No network transport,
-URL command handler, token, pairing export or Steam account operation is added.
-WDA requires the normal trusted/pairing/signed development-device provisioning.
-USB forwarding reliability has not been measured here; no forwarder is assumed.
+flag. The Release configuration does not define DEBUG. The paired command
+transport below is also compiled out of ordinary builds. There is no URL command
+handler, pairing export or Steam account operation. WDA requires the normal
+trusted/pairing/signed development-device provisioning.
 
 | Accessibility identifier | Operation |
 |---|---|
@@ -60,8 +60,8 @@ The opted-in pane now accepts a JSON request through
 `madeira.automation.command` and its `madeira.automation.send-command` button.
 `madeira.automation.reply` returns the correlated JSON reply. Status snapshots
 remain schema 1 with added `game_status`; command requests/replies are schema 2.
-No network listener, launch path, credentials or arbitrary launch arguments are
-accepted. Appium's existing paired XCTest session remains the transport.
+The same parser and request ledger serve both the paired socket below and the
+legacy XCTest pane. Arbitrary launch paths and arguments are not accepted.
 
 The opted-in panel is hosted in the existing controls window above the raw
 Metal surface. Its measured rectangle owns its touches even during startup;
@@ -150,3 +150,60 @@ default deadline is 120 seconds, with a final in-flight XCTest/OCR call bounded
 by its own transport timeout. The CLI never launches or terminates the app.
 Localized menus, overlays obscuring the menu, and other games need separate
 checkpoints; no elapsed-time/frame-counter fallback is used.
+
+
+## Paired command transport v1
+
+An opted-in process starts a Network.framework TCP listener on IPv4 loopback
+with an ephemeral port. It advertises no Bonjour service and binds no LAN
+interface. `Documents/automation-transport.private.json` contains schema version
+1, PID, port and a random per-process capability token. The file is atomically
+written, then set to permissions 0600 once the listener is ready; listener failure
+removes it. A stale file from a terminated process cannot authenticate a new one.
+The controller copies it into a private temporary directory using paired
+`devicectl`, validates the expected live PID, and removes its copy on scope exit.
+Never put this file or its token in logs, reports, screenshots or commits.
+
+`iproxy` binds the Mac endpoint to 127.0.0.1 and forwards to that device port.
+`-l` selects USB, `-n` selects a paired network device. Wi-Fi discovery/pairing,
+JIT, XCTest and app-container copying still need separate physical verification;
+transport support alone does not establish that entire workflow works wirelessly.
+
+The wire format is one UTF-8 JSON object plus newline. A snapshot request has
+`token` and `kind: snapshot`. A command request adds `kind: command` and a
+`request` object containing the existing schema-2 command. The token is not
+returned. Replies retain the existing schema-1 snapshot/schema-2 command format.
+Only one connection and one outstanding request are supported. Request frames
+are limited to 8192 bytes including newline, command JSON to 4096 bytes, and
+host replies to 65536 bytes. Partial frames expire after five seconds before
+authentication, then fifteen seconds between completed requests. Extra/pipelined
+frames, authentication failures and malformed envelopes close the connection.
+
+Authenticated snapshots refresh the native replay watchdog, increment the
+snapshot sequence, and read status without publishing a SwiftUI update. They
+do not consume the 1000-entry command-ID ledger. Host requests check PID,
+sequence/correlation and schema, and fail closed on a lost/invalid reply; they
+never retry a mutation or silently fall back to typing. The existing native
+10-second replay watchdog remains in force. Disconnect stops active replay,
+clears virtual input and stops an unfinished capture without exporting success;
+it never terminates the game. A completed capture remains available for copying.
+
+The controller uses `attach_transport` inside the existing shared
+`reserve_device` lease. Keep its context open across launch/replay/capture and
+call `snapshot` every two seconds while waiting, including game readiness waits.
+There is deliberately no background heartbeat that could conceal a stuck test
+controller. Appium still handles JIT UI bootstrap and screenshot checkpoints.
+
+`game-command` and `benchmark-capture` CLI commands default to socket transport.
+Use global `--command-transport xctest` explicitly for an older installed build;
+there is no automatic fallback. `--transport localNetwork` chooses network
+forwarding, while the default `--transport wired` chooses USB. A one-shot CLI
+command closes its socket on completion: use the persistent Python context for
+replay/capture sequences, rather than starting a replay in a one-shot invocation.
+
+Validation for this change: the actual Swift listener runs on macOS against
+host-only probe/replay stand-ins, checking fragmented frames, authentication,
+limits, controller exclusivity, expiry, disconnect cleanup and 1100 snapshots.
+Host tests do not prove iPad forwarding, real replay cleanup or Wi-Fi/JIT
+coexistence. The iPad was left untouched while the owner installed another game;
+physical command/capture verification remains pending.

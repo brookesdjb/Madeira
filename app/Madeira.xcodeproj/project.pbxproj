@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		AT310001 /* AutomationTransport.swift in Sources */ = {isa = PBXBuildFile; fileRef = AT320001 /* AutomationTransport.swift */; };
 		AF110001 = {isa = PBXBuildFile; fileRef = AF120001; };
 		AC310001 /* AutomationCommand.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC320001 /* AutomationCommand.swift */; };
 		E5510001 /* SteamStorage.swift in Sources */ = {isa = PBXBuildFile; fileRef = E5520001 /* SteamStorage.swift */; };
@@ -177,6 +178,7 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		AT320001 /* AutomationTransport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AutomationTransport.swift; sourceTree = "<group>"; };
 		AF120001 = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = AutomationFrameCapture.m; sourceTree = "<group>"; };
 		AC320001 /* AutomationCommand.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AutomationCommand.swift; sourceTree = "<group>"; };
 		E5520001 /* SteamStorage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "SteamStorage.swift"; sourceTree = "<group>"; };
@@ -455,6 +457,7 @@
 				A2000243 /* GamepadInput.swift */,
 				A2000260 /* PadKeyboardMouse.swift */,
 				AC320001 /* AutomationCommand.swift */,
+				AT320001 /* AutomationTransport.swift */,
 				AF120001,
 				A2000002 /* ContentView.swift */,
 				A2000003 /* LogStore.swift */,
@@ -782,6 +785,7 @@
 				A1000243 /* GamepadInput.swift in Sources */,
 				A1000260 /* PadKeyboardMouse.swift in Sources */,
 				AC310001 /* AutomationCommand.swift in Sources */,
+				AT310001 /* AutomationTransport.swift in Sources */,
 				AF110001,
 				A1000002 /* ContentView.swift in Sources */,
 				A1000003 /* LogStore.swift in Sources */,

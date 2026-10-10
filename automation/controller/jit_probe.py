@@ -5,6 +5,9 @@ from .device import AutomationError
 
 
 def snapshot(device):
+    transport = getattr(device, "command_transport", None)
+    if transport is not None:
+        return transport.snapshot()
     # XCTest can return a pre-refresh SwiftUI value after the button click.
     # Require a newer publication, rather than treating old replay completion
     # or readiness as the result of this refresh.
