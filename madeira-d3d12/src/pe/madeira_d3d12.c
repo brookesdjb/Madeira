@@ -310,6 +310,9 @@ static LONG g_f6_begins, g_f6_synced, g_f6_att_sync, g_f6_kept_open, g_f6_joins,
  * 1 of 16 frames, with what happens NEXT to each stored attachment in its list. */
 enum { BC_RAR, BC_RAW_ATT, BC_RAW_COPY, BC_RAW_UAV, BC_ALL, BC_NONE = 255 };
 static LONG g_bc_ent[5], g_f7_bsync, g_f7_none, g_f7_subset, g_f7_all;
+/* ExecuteIndirect: multi-argument replays read on the CPU, refused because the
+ * records may be GPU-written, and count buffers honoured or ignored. */
+static LONG g_ei_multi_cpu, g_ei_multi_gpu, g_ei_count_cpu, g_ei_count_ignored;
 static LONG64 g_f7_fw6, g_f7_fwr;
 static LONG64 g_ac_load, g_ac_clear, g_ac_store, g_ac_st_cleared, g_ac_st_read, g_ac_st_rebound, g_ac_st_write, g_ac_st_none;
 static LONG g_ac_frames, g_discards;
@@ -496,6 +499,8 @@ static void mad_skip_report(void) {
               g_tview_live, g_tview_made, g_xview_live);
     d3d12_log("[madeira-d3d12] ml1132 address lookups on the locked path: %ld (true misses %ld); every other lookup was lock-free\n",
               g_resolve_locked, g_resolve_miss);
+    d3d12_log("[madeira-d3d12] ExecuteIndirect: %ld multi-argument replays read on the CPU, %ld skipped (GPU-writable records); "
+              "count buffers: %ld read, %ld ignored\n", g_ei_multi_cpu, g_ei_multi_gpu, g_ei_count_cpu, g_ei_count_ignored);
 }
 
 static void mad_log_nserror(const char *what, obj_handle_t err);
@@ -1142,7 +1147,8 @@ struct mad_cmd {
         struct { struct mad_resource *tex, *buf; UINT64 off; UINT row, rows; UINT w, h, d; UINT level, slice; UINT x, y, z; UINT plane; } bt;
         struct { struct mad_resource *dst, *src; UINT dlevel, dslice, slevel, sslice; UINT w, h, d; UINT dx, dy, dz, sx, sy, sz; UINT dplane, splane; } tt;
         struct { UINT x, y, z; } dispatch;
-        struct { struct mad_resource *args; UINT64 off; UINT count; UINT stride; struct mad_resource *cnt; UINT64 cnt_off; } ind;
+        struct { struct mad_resource *args; UINT64 off; UINT count; UINT stride; struct mad_resource *cnt; UINT64 cnt_off;
+                 const struct mad_cmdsig *sig; UINT draw_off; } ind;   /* sig: multi-argument records, applied at replay */
         struct { struct mad_resource *res; UINT64 off, len; UINT8 byte; obj_handle_t pattern; } fill;   /* ml1151: pattern = exact 32-bit source */
         struct { struct mad_resource *res; UINT level, sl0, nsl, bpp; obj_handle_t pattern; } filltex;   /* MC_FILL_TEX: mip, slices, texel size */
         struct { float rgba[4]; } blend;
@@ -4691,6 +4697,9 @@ static void exec_dispatch(struct mad_exec *e, const struct mad_cmd *c) {
     }
 }
 
+struct mad_cmdsig;
+static int mad_ei_cpu_readable(const struct mad_resource *r, UINT64 off, UINT64 len);
+static void mad_ei_apply(struct mad_exec *e, const struct mad_cmdsig *cs, const BYTE *rec, int compute);
 static void mad_exec_list(struct mad_queue *q, struct mad_list *l, obj_handle_t cb) {
     g_list_seq++;
     struct mad_exec e;
@@ -4783,10 +4792,34 @@ static void mad_exec_list(struct mad_queue *q, struct mad_list *l, obj_handle_t 
         case MC_QUERY_RESOLVE: exec_query_resolve(&e, c); break;
         case MC_DRAW: case MC_DRAW_INDEXED: exec_draw(&e, c); break;
         case MC_DRAW_INDIRECT: case MC_DRAW_INDEXED_INDIRECT: case MC_DISPATCH_INDIRECT: {
-            struct mad_cmd t = *c; UINT k;
+            struct mad_cmd t = *c; UINT k, count = c->u.ind.count;
+            const struct mad_resource *cnt = c->u.ind.cnt;
             if (!c->u.ind.args || !c->u.ind.args->buffer) { e.skipped++; break; }
-            for (k = 0; k < c->u.ind.count; k++) {
-                t.u.ind.off = c->u.ind.off + (UINT64)k * c->u.ind.stride;
+            /* A count the CPU wrote is exact now; one the GPU may still write is
+             * not, and all MaxCommandCount records are issued as before. */
+            if (cnt && mad_ei_cpu_readable(cnt, c->u.ind.cnt_off, 4)) {
+                UINT32 n; memcpy(&n, (const BYTE *)cnt->cpu + c->u.ind.cnt_off, 4);
+                if (n < count) count = n;
+                InterlockedIncrement(&g_ei_count_cpu);
+            } else if (cnt) InterlockedIncrement(&g_ei_count_ignored);
+            if (c->u.ind.sig) {
+                /* Records that change state between draws are read here, at
+                 * replay, which is only correct when no GPU work can still be
+                 * writing them: an UPLOAD heap is GPU read-only. */
+                if (!mad_ei_cpu_readable(c->u.ind.args, c->u.ind.off, (UINT64)c->u.ind.count * c->u.ind.stride)) {
+                    static unsigned said;
+                    if (said++ < 4) d3d12_log("[madeira-d3d12] ExecuteIndirect: multi-argument records in a GPU-writable heap (type %u) need GPU expansion; skipped\n",
+                                              (unsigned)c->u.ind.args->heap);
+                    InterlockedIncrement(&g_ei_multi_gpu);
+                    e.skipped++;
+                    break;
+                }
+                InterlockedIncrement(&g_ei_multi_cpu);
+            }
+            for (k = 0; k < count; k++) {
+                UINT64 rec = c->u.ind.off + (UINT64)k * c->u.ind.stride;
+                if (c->u.ind.sig) mad_ei_apply(&e, c->u.ind.sig, (const BYTE *)c->u.ind.args->cpu + rec, c->kind == MC_DISPATCH_INDIRECT);
+                t.u.ind.off = rec + c->u.ind.draw_off;
                 if (c->kind == MC_DISPATCH_INDIRECT) exec_dispatch(&e, &t); else exec_draw(&e, &t);
             }
             break;
@@ -11024,38 +11057,127 @@ static void STDMETHODCALLTYPE list_ResourceBarrier(ID3D12GraphicsCommandList *Th
 /* ml889: ExecuteIndirect. D3D12's argument records are byte-for-byte Metal's
  * indirect argument structs (DRAW_ARGUMENTS == MTLDrawPrimitivesIndirectArguments,
  * DRAW_INDEXED_ARGUMENTS == MTLDrawIndexedPrimitivesIndirectArguments,
- * DISPATCH_ARGUMENTS == MTLDispatchThreadgroupsIndirectArguments), so a
- * single-argument signature is one indirect draw/dispatch per record. Metal
- * has no count buffer: MaxCommandCount records are issued, and a record the
- * GPU zeroed draws nothing. Signatures with root-constant/VBV/IBV changes per
- * record are refused by name. */
+ * DISPATCH_ARGUMENTS == MTLDispatchThreadgroupsIndirectArguments), so each
+ * record is one indirect draw/dispatch whose arguments the GPU reads.
+ *
+ * Signatures that also change root constants, root views or vertex/index
+ * buffers per record (UE5 and other GPU-driven renderers) are replayed by
+ * reading each record's state changes on the CPU (mad_ei_apply), which is
+ * only correct when the records sit in an UPLOAD heap; records the GPU may
+ * write are refused by name at replay. Metal has no count buffer: a count in
+ * an UPLOAD heap is read at replay, otherwise MaxCommandCount records are
+ * issued and a record the GPU zeroed draws nothing. */
+static UINT mad_ei_arg_size(const D3D12_INDIRECT_ARGUMENT_DESC *a) {
+    switch (a->Type) {
+    case D3D12_INDIRECT_ARGUMENT_TYPE_DRAW: return sizeof(D3D12_DRAW_ARGUMENTS);
+    case D3D12_INDIRECT_ARGUMENT_TYPE_DRAW_INDEXED: return sizeof(D3D12_DRAW_INDEXED_ARGUMENTS);
+    case D3D12_INDIRECT_ARGUMENT_TYPE_DISPATCH: return sizeof(D3D12_DISPATCH_ARGUMENTS);
+    case D3D12_INDIRECT_ARGUMENT_TYPE_VERTEX_BUFFER_VIEW: return sizeof(D3D12_VERTEX_BUFFER_VIEW);
+    case D3D12_INDIRECT_ARGUMENT_TYPE_INDEX_BUFFER_VIEW: return sizeof(D3D12_INDEX_BUFFER_VIEW);
+    case D3D12_INDIRECT_ARGUMENT_TYPE_CONSTANT: return a->Constant.Num32BitValuesToSet * 4;
+    case D3D12_INDIRECT_ARGUMENT_TYPE_CONSTANT_BUFFER_VIEW:
+    case D3D12_INDIRECT_ARGUMENT_TYPE_SHADER_RESOURCE_VIEW:
+    case D3D12_INDIRECT_ARGUMENT_TYPE_UNORDERED_ACCESS_VIEW: return sizeof(D3D12_GPU_VIRTUAL_ADDRESS);
+    default: return 0;   /* rays and mesh dispatches: not supported */
+    }
+}
+
+/* Records the CPU can read at replay with nothing on the GPU still writing them. */
+static int mad_ei_cpu_readable(const struct mad_resource *r, UINT64 off, UINT64 len) {
+    return r && r->cpu && r->heap == D3D12_HEAP_TYPE_UPLOAD && off <= r->size && len <= r->size - off;
+}
+
+/* One record's state changes, in signature order, applied as the matching
+ * Set* calls would have been. The draw/dispatch itself is the last argument
+ * and is left to the GPU. */
+static void mad_ei_apply(struct mad_exec *e, const struct mad_cmdsig *cs, const BYTE *rec, int compute) {
+    UINT i, off = 0;
+    for (i = 0; i + 1 < cs->desc.NumArgumentDescs; i++) {
+        const D3D12_INDIRECT_ARGUMENT_DESC *a = &cs->args[i];
+        const BYTE *p = rec + off;
+        off += mad_ei_arg_size(a);
+        switch (a->Type) {
+        case D3D12_INDIRECT_ARGUMENT_TYPE_CONSTANT: {
+            UINT idx = a->Constant.RootParameterIndex, dst = a->Constant.DestOffsetIn32BitValues, n = a->Constant.Num32BitValuesToSet;
+            if (idx < MAD_ROOT_PARAM_MAX && dst + n <= 64)
+                memcpy(compute ? &e->cconsts[idx][dst] : &e->consts[idx][dst], p, n * 4);
+            break;
+        }
+        case D3D12_INDIRECT_ARGUMENT_TYPE_CONSTANT_BUFFER_VIEW:
+        case D3D12_INDIRECT_ARGUMENT_TYPE_SHADER_RESOURCE_VIEW:
+        case D3D12_INDIRECT_ARGUMENT_TYPE_UNORDERED_ACCESS_VIEW: {
+            /* the three share one layout: RootParameterIndex first */
+            UINT idx = a->ConstantBufferView.RootParameterIndex;
+            UINT64 va, roff = 0;
+            memcpy(&va, p, sizeof va);
+            if (idx >= MAD_ROOT_PARAM_MAX) break;
+            mad_list_note_used(e->l, mad_resolve_address(e->l->device, va, &roff));
+            if (compute) e->croot[idx] = va;
+            else { e->root[idx] = va; if (idx + 1 > e->nroot) e->nroot = idx + 1; }
+            break;
+        }
+        case D3D12_INDIRECT_ARGUMENT_TYPE_VERTEX_BUFFER_VIEW: {
+            D3D12_VERTEX_BUFFER_VIEW v; UINT slot = a->VertexBuffer.Slot; UINT64 roff = 0;
+            memcpy(&v, p, sizeof v);
+            if (slot >= 16) break;
+            e->vb[slot].res = v.BufferLocation ? mad_resolve_address(e->l->device, v.BufferLocation, &roff) : NULL;
+            e->vb[slot].off = roff;
+            e->vb[slot].stride = v.StrideInBytes;
+            break;
+        }
+        case D3D12_INDIRECT_ARGUMENT_TYPE_INDEX_BUFFER_VIEW: {
+            D3D12_INDEX_BUFFER_VIEW v; UINT64 roff = 0;
+            memcpy(&v, p, sizeof v);
+            e->ib = v.BufferLocation ? mad_resolve_address(e->l->device, v.BufferLocation, &roff) : NULL;
+            e->ib_off = roff;
+            e->ib_type = v.Format == DXGI_FORMAT_R32_UINT ? WMTIndexTypeUInt32 : WMTIndexTypeUInt16;
+            break;
+        }
+        default: break;   /* refused when recorded */
+        }
+    }
+}
+
 static void STDMETHODCALLTYPE list_ExecuteIndirect(ID3D12GraphicsCommandList *This, ID3D12CommandSignature *sig,
         UINT max_count, ID3D12Resource *args, UINT64 args_off, ID3D12Resource *count_buf, UINT64 count_off) {
     struct mad_cmdsig *cs = (struct mad_cmdsig *)sig;
+    const D3D12_INDIRECT_ARGUMENT_DESC *last;
     struct mad_cmd *c;
     enum mad_ck kind;
-    static unsigned said_multi, said_count, said_big;
-    if (!cs || !args || !max_count) return;
-    if (cs->desc.NumArgumentDescs != 1) {
-        if (said_multi++ < 4) d3d12_log("[madeira-d3d12] ExecuteIndirect: signature with %u argument descs is not implemented; skipped\n", cs->desc.NumArgumentDescs);
-        return;
-    }
-    switch (cs->args[0].Type) {
+    UINT i, draw_off = 0, rec_size;
+    static unsigned said_multi, said_big;
+    if (!cs || !args || !max_count || !cs->desc.NumArgumentDescs) return;
+    /* D3D12 puts the draw or dispatch last; everything before it changes state. */
+    last = &cs->args[cs->desc.NumArgumentDescs - 1];
+    switch (last->Type) {
     case D3D12_INDIRECT_ARGUMENT_TYPE_DRAW: kind = MC_DRAW_INDIRECT; break;
     case D3D12_INDIRECT_ARGUMENT_TYPE_DRAW_INDEXED: kind = MC_DRAW_INDEXED_INDIRECT; break;
     case D3D12_INDIRECT_ARGUMENT_TYPE_DISPATCH: kind = MC_DISPATCH_INDIRECT; break;
     default:
-        if (said_multi++ < 4) d3d12_log("[madeira-d3d12] ExecuteIndirect: argument type %u is not implemented; skipped\n", (unsigned)cs->args[0].Type);
+        if (said_multi++ < 4) d3d12_log("[madeira-d3d12] ExecuteIndirect: argument type %u is not implemented; skipped\n", (unsigned)last->Type);
         return;
     }
-    if (count_buf && said_count++ < 1)
-        d3d12_log("[madeira-d3d12] ExecuteIndirect: count buffers are not honoured yet; issuing all %u records\n", max_count);
+    for (i = 0; i + 1 < cs->desc.NumArgumentDescs; i++) {
+        UINT sz = mad_ei_arg_size(&cs->args[i]);
+        if (!sz || cs->args[i].Type <= D3D12_INDIRECT_ARGUMENT_TYPE_DISPATCH) {
+            if (said_multi++ < 4) d3d12_log("[madeira-d3d12] ExecuteIndirect: argument type %u before the draw is not implemented; skipped\n", (unsigned)cs->args[i].Type);
+            return;
+        }
+        draw_off += sz;
+    }
+    rec_size = draw_off + mad_ei_arg_size(last);
+    if (cs->desc.ByteStride && cs->desc.ByteStride < rec_size) {
+        if (said_multi++ < 4) d3d12_log("[madeira-d3d12] ExecuteIndirect: stride %u is smaller than the %u-byte record; skipped\n", cs->desc.ByteStride, rec_size);
+        return;
+    }
     if (max_count > 8192) { if (said_big++ < 4) d3d12_log("[madeira-d3d12] ExecuteIndirect: %u records capped at 8192\n", max_count); max_count = 8192; }
     c = mad_list_push((struct mad_list *)This, kind);
     if (!c) return;
     c->u.ind.args = (struct mad_resource *)args; c->u.ind.off = args_off; c->u.ind.count = max_count;
-    c->u.ind.stride = cs->desc.ByteStride ? cs->desc.ByteStride : (kind == MC_DRAW_INDIRECT ? 16 : kind == MC_DRAW_INDEXED_INDIRECT ? 20 : 12);
+    c->u.ind.stride = cs->desc.ByteStride ? cs->desc.ByteStride : rec_size;
     c->u.ind.cnt = (struct mad_resource *)count_buf; c->u.ind.cnt_off = count_off;
+    c->u.ind.sig = cs->desc.NumArgumentDescs > 1 ? cs : NULL;
+    c->u.ind.draw_off = draw_off;
 }
 static void STDMETHODCALLTYPE list_CopyBufferRegion(ID3D12GraphicsCommandList *This,
         ID3D12Resource *dst, UINT64 dst_off, ID3D12Resource *src, UINT64 src_off, UINT64 len) {

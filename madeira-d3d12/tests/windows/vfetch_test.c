@@ -15,6 +15,8 @@
  *    6  case 1 through ExecuteIndirect with the args at byte offset 100
  *    7  compute probe: the same CBV / typed buffers read by a compute shader
  *       and written out verbatim
+ *    8  ExecuteIndirect with a [root CBV, vertex buffer view, draw] signature:
+ *       two records with different CBVs (8a), then a count buffer of 1 (8b)
  *
  *  Every line is printed to stdout AND stderr so it reaches the app log.
  */
@@ -401,6 +403,57 @@ int main(void) {
     copy_rt_to_readback(); submit_and_wait();
     { unsigned n = count_colour("case6 indirect draw", 0, 64, 255);
       CHECK(n == RT_W * RT_H, "case6: ExecuteIndirect with args at byte 100 covers the target (%u/%u)", n, RT_W * RT_H); }
+
+    /* ---- case 8: multi-argument ExecuteIndirect. Each 48-byte record is
+     * [root CBV for param 1, vertex buffer view for slot 0, DrawInstanced].
+     * Record 0 points at the full-size CBV colour A; record 1 at a half-scale
+     * yellow CBV, drawn second so it lands on top. 8a: both records, so about
+     * 9/16 of the target is yellow and the rest A; record 1's CBV not applied
+     * would leave it all A. 8b: the same with an UPLOAD count buffer of 1, so
+     * only record 0 draws. ---- */
+    {
+        ID3D12CommandSignature *msig = NULL;
+        D3D12_INDIRECT_ARGUMENT_DESC ia[3]; D3D12_COMMAND_SIGNATURE_DESC csd;
+        struct params ph; BYTE rec[2][48]; UINT one = 1;
+        UINT64 cb0 = ID3D12Resource_GetGPUVirtualAddress(cbuf) + 256, cb1 = ID3D12Resource_GetGPUVirtualAddress(cbuf) + 768;
+        D3D12_VERTEX_BUFFER_VIEW v; UINT draw[4] = { 3, 1, 0, 0 }; int k;
+        ZeroMemory(ia, sizeof ia); ZeroMemory(&csd, sizeof csd);
+        ia[0].Type = D3D12_INDIRECT_ARGUMENT_TYPE_CONSTANT_BUFFER_VIEW; ia[0].ConstantBufferView.RootParameterIndex = 1;
+        ia[1].Type = D3D12_INDIRECT_ARGUMENT_TYPE_VERTEX_BUFFER_VIEW; ia[1].VertexBuffer.Slot = 0;
+        ia[2].Type = D3D12_INDIRECT_ARGUMENT_TYPE_DRAW;
+        csd.ByteStride = 48; csd.NumArgumentDescs = 3; csd.pArgumentDescs = ia;
+        ID3D12Device_CreateCommandSignature(dev, &csd, rs, &IID_ID3D12CommandSignature, (void **)&msig);
+        CHECK(msig != NULL, "command signature (root CBV, vertex buffer, draw)");
+        memset(&ph, 0, sizeof ph); memcpy(ph.xform, HALF, sizeof ph.xform);
+        ph.colour[0] = 1.0f; ph.colour[1] = 1.0f; ph.colour[2] = 0.0f; ph.colour[3] = 1.0f;
+        upload(cbuf, 768, &ph, sizeof ph);
+        v.BufferLocation = ID3D12Resource_GetGPUVirtualAddress(vbuf) + 64; v.SizeInBytes = 36; v.StrideInBytes = 12;
+        memset(rec, 0x77, sizeof rec);   /* padding between records is junk */
+        for (k = 0; k < 2; k++) {
+            memcpy(rec[k], k ? &cb1 : &cb0, 8); memcpy(rec[k] + 8, &v, sizeof v); memcpy(rec[k] + 24, draw, sizeof draw);
+        }
+        upload(indbuf, 256, rec, sizeof rec);
+        upload(indbuf, 512, &one, sizeof one);
+        if (msig) {
+            set_params(IDENT, 0.0f, 0.25f, 1.0f, 0);
+            begin_frame(pso_stream, 0); bind_streams(4, 0);
+            ID3D12GraphicsCommandList_SetGraphicsRootConstantBufferView(list, 1, 0);   /* the records must set it */
+            ID3D12GraphicsCommandList_ExecuteIndirect(list, msig, 2, indbuf, 256, NULL, 0);
+            copy_rt_to_readback(); submit_and_wait();
+            { unsigned a = count_colour("case8a record 0 colour A", 0, 64, 255);
+              unsigned b = count_colour("case8a record 1 yellow, half scale", 255, 255, 0);
+              CHECK(b > RT_W * RT_H / 3 && b < RT_W * RT_H * 3 / 4 + RT_W * 2 && a + b == RT_W * RT_H,
+                    "case8a: each record draws with its own CBV (A=%u yellow=%u of %u)", a, b, RT_W * RT_H); }
+
+            begin_frame(pso_stream, 0); bind_streams(4, 0);
+            ID3D12GraphicsCommandList_ExecuteIndirect(list, msig, 2, indbuf, 256, indbuf, 512);
+            copy_rt_to_readback(); submit_and_wait();
+            { unsigned a = count_colour("case8b count 1: record 0 only (A)", 0, 64, 255);
+              unsigned b = count_colour("case8b yellow, must be 0", 255, 255, 0);
+              CHECK(a == RT_W * RT_H && b == 0, "case8b: the count buffer limits the records drawn (A=%u yellow=%u)", a, b); }
+            ID3D12CommandSignature_Release(msig);
+        }
+    }
 
     /* ---- case 7: compute. 7a writes constants through the table UAV (no
      * reads); 7b is the full probe through the table UAV; 7c is the same
