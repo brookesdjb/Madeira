@@ -4801,6 +4801,19 @@ struct MappingPanel: View {
         }
         let model = LibraryModel.shared
         switch request.operation {
+        case .inputReserve:
+            guard model.current == nil, !launchRequested, LibraryModel.sessionsThisRun == 0, GamepadInput.enabled else { reply("rejected", "fresh_idle_process_required"); return }
+            GamepadInput.shared.reserveAutomation()
+            reply("completed", "input_reserved")
+        case .replayStart:
+            guard ownedGame != nil, model.current == ownedGame, !model.launching, !stopRequested,
+                  let plan = request.replay, AutomationGameplayReplay.shared.start(plan) else { reply("rejected", "replay_requires_owned_focused_session"); return }
+            reply("accepted", "replay_started")
+        case .replayStop:
+            AutomationGameplayReplay.shared.stop("host_stopped")
+            reply("completed", data: AutomationGameplayReplay.shared.status)
+        case .replayStatus:
+            reply("completed", data: AutomationGameplayReplay.shared.status)
         case .games:
             // Existing library entries only. No account or arbitrary filesystem discovery.
             reply("completed", data: installedEntries().map {
@@ -4904,7 +4917,7 @@ private struct AutomationProbePanel: View {
                     .accessibilityValue(probe.commandReply)
             }
             HStack {
-                Button("Refresh") { probe.refresh() }
+                Button("Refresh") { AutomationGameplayReplay.shared.heartbeat(); probe.refresh() }
                     .accessibilityIdentifier("madeira.automation.refresh")
                 Button("Enable JIT") {
                     guard !JITCoordinator.shared.busy, LibraryModel.shared.current == nil,
@@ -4922,6 +4935,57 @@ private struct AutomationProbePanel: View {
         .padding(6)
         .background(.regularMaterial)
         .onAppear { probe.refresh() }
+    }
+}
+#endif
+
+#if DEBUG && MADEIRA_AUTOMATION
+@MainActor final class AutomationGameplayReplay {
+    static let shared = AutomationGameplayReplay()
+    private var timer: Timer?
+    private var plan: AutomationReplayPlan?
+    private var origin: UInt64 = 0, lastHeartbeat: UInt64 = 0
+    private var index = 0
+    private var lateness: [Int] = []
+    private var outcome = "NOT_RUN"
+    private var observer: NSObjectProtocol?
+    private init() {
+        observer = NotificationCenter.default.addObserver(forName: UIApplication.willResignActiveNotification, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.stop("FOCUS_LOST") }
+        }
+    }
+    var status: [String: Any] { ["state": outcome, "events_applied": index, "lateness_us": lateness,
+        "clock": "dispatch_uptime_ns", "frame_alignment": "NOT_ESTABLISHED"] }
+    func heartbeat() { lastHeartbeat = DispatchTime.now().uptimeNanoseconds }
+    func start(_ value: AutomationReplayPlan) -> Bool {
+        guard timer == nil, value.valid(), HardwareInput.shared.automationFocus() else { return false }
+        plan = value; index = 0; lateness = []; origin = DispatchTime.now().uptimeNanoseconds
+        heartbeat(); outcome = "RUNNING"
+        let source = Timer(timeInterval: 0.004, repeats: true) { [weak self] _ in self?.tick() }
+        timer = source; RunLoop.main.add(source, forMode: .common); return true
+    }
+    private func tick() {
+        guard let plan else { return }
+        let now = DispatchTime.now().uptimeNanoseconds
+        guard UIApplication.shared.applicationState == .active,
+              LibraryModel.shared.current != nil, HardwareInput.shared.automationFocus() else { stop("FOCUS_LOST"); return }
+        guard now - lastHeartbeat < 10000000000 else { stop("HOST_TIMEOUT"); return }
+        let elapsed = (now - origin) / 1000000
+        if elapsed >= UInt64(plan.duration_ms) { stop("COMPLETED"); return }
+        while index < plan.events.count && UInt64(plan.events[index].at_ms) <= elapsed {
+            let event = plan.events[index]
+            let late = Int((now - origin) / 1000) - event.at_ms * 1000
+            guard late <= 100000 else { stop("TIMING_OVERRUN"); return }
+            HardwareInput.shared.automationSetKeys(Set(event.keys.map { Int32($0) }))
+            HardwareInput.shared.postRelative(event.dx ?? 0, event.dy ?? 0)
+            GamepadInput.shared.automation(GamepadSample(buttons: event.buttons ?? 0, lx: event.lx ?? 0, ly: event.ly ?? 0, rx: event.rx ?? 0, ry: event.ry ?? 0))
+            lateness.append(late); index += 1
+        }
+    }
+    func stop(_ reason: String) {
+        timer?.invalidate(); timer = nil; plan = nil; outcome = reason
+        HardwareInput.shared.automationSetKeys([])
+        GamepadInput.shared.automation(GamepadSample())
     }
 }
 #endif

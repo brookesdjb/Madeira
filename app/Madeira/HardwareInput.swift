@@ -941,8 +941,23 @@ final class HardwareInput: ObservableObject {
         startTicker()
     }
 
+#if DEBUG && MADEIRA_AUTOMATION
+    private var automationKeys: Set<Int32> = []
+    func automationFocus() -> Bool {
+        refreshFocus("automation")
+        return baseFocused && keyboardFocused && !LibraryController.shared.ownsInput
+    }
+    func automationSetKeys(_ values: Set<Int32>) {
+        automationKeys = values
+        syncKeys()
+    }
+#endif
     private func syncKeys() {
-        let edges = keysPosted.update(keys.wanted(focused: keyboardFocused))
+        var wanted = keys.wanted(focused: keyboardFocused)
+#if DEBUG && MADEIRA_AUTOMATION
+        if keyboardFocused { wanted.formUnion(automationKeys) }
+#endif
+        let edges = keysPosted.update(wanted)
         for vk in edges.up { winios_post_key(vk, 0) }
         for vk in edges.down { winios_post_key(vk, 1) }
     }
