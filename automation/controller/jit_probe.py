@@ -5,6 +5,16 @@ from .device import AutomationError
 
 
 def snapshot(device):
+    # XCTest can return a pre-refresh SwiftUI value after the button click.
+    # Require a newer publication, rather than treating old replay completion
+    # or readiness as the result of this refresh.
+    previous = -1
+    try:
+        old = json.loads(device.value("madeira.automation.status"))
+        if isinstance(old, dict) and type(old.get("sequence")) is int:
+            previous = old["sequence"]
+    except (ValueError, AutomationError):
+        pass
     try:
         device.tap_id("madeira.automation.refresh")
     except AutomationError as exc:
@@ -19,10 +29,16 @@ def snapshot(device):
                 raise
             raise exc
         raise AutomationError("jit_setup_required") from None
-    result = json.loads(device.value("madeira.automation.status"))
-    if not isinstance(result, dict) or result.get("schema_version") != 1:
-        raise AutomationError("unsupported_probe_schema")
-    return result
+    deadline = time.monotonic() + 5
+    while True:
+        result = json.loads(device.value("madeira.automation.status"))
+        if not isinstance(result, dict) or result.get("schema_version") != 1 or type(result.get("sequence")) is not int:
+            raise AutomationError("unsupported_probe_schema")
+        if result["sequence"] > previous:
+            return result
+        if time.monotonic() >= deadline:
+            raise AutomationError("probe_status_not_refreshing")
+        time.sleep(0.05)
 
 
 def wait_for(workflow, condition, seconds=100, clock=time.monotonic, pause=time.sleep):
