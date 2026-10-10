@@ -63,8 +63,13 @@ git-ignored and consumed by the app project.
    `app/Madeira/legal/LICENSES-rppairing-crates.txt` (tracked). `cargo test`
    in that folder runs its host tests. Verified on the development machine.
 5. Native D3D12 runtime: `build/madeira-d3d12/build-pe.sh` -> `d3d12.dll`, `madeira_d3d12.dll` and the test executables in `app/Madeira/arm64ec-windows/` (tracked). Verified this session. `build/madeira-d3d12/fetch-converter.sh` re-verifies the converter library; `build/stage-licenses.sh` refreshes the bundled licence copies (the Xcode build fails if they are stale).
-6. App: `xcodebuild -project app/Madeira.xcodeproj -scheme Madeira -destination 'generic/platform=iOS' -allowProvisioningUpdates build` (Debug is the configuration that runs the games; Release builds have crashed the guest), then zip `Payload/Madeira.app` into an IPA and sideload. Verified this session on the development machine.
-7. WoW64 (32-bit programs, optional): `build/wine-i386/build.sh` (i386 Wine farm
+6. OpenGL games:
+   - Before step 3, apply the Wine patch: `git -C wine apply ../patches/wine-opengl-winios.patch`. Then rebuild the tracked `opengl32.dll` with `build/wine-pe/build-modules.sh opengl32`.
+   - `build/moltenvk-ios/build.sh`, then `build/mesa-ios/build.sh` -> `app/Madeira/gl/`, the desktop OpenGL backend. Optional: without it the app uses OpenGL ES. The script applies every file in `build/mesa-ios/patches` once (a `.madeira-applied-*` marker in the Mesa source records it), so an existing Mesa tree picks up a new patch on the next run.
+   - 32-bit OpenGL games (id Tech 3: Jedi Academy, Jedi Outcast, Quake III) need all of: the regenerated wow64 thunks in `wine-opengl-winios.patch` (from `dlls/opengl32/make_opengl`; to regenerate, run `perl make_opengl` in `wine/dlls/opengl32`, which downloads the pinned Khronos registry files into `~/.cache/wine`), `build/ntdll-unix` rebuilt, and Mesa patch `0004` (Zink on MoltenVK: fragment inputs Metal can link, and no crash when a pipeline fails). They need the desktop OpenGL (Zink) backend; fixed-function OpenGL does not exist in OpenGL ES. A 32-bit process gets `GL_EXTENSIONS` cut to 3072 bytes, because these engines copy it into a fixed buffer; `env.MADEIRA_GL_EXTENSIONS_MAX` in madeira.cfg sets another limit (0 = none).
+   - Each script says what source to download if it is missing. Verified on the development machine.
+7. App: `xcodebuild -project app/Madeira.xcodeproj -scheme Madeira -destination 'generic/platform=iOS' -allowProvisioningUpdates build` (Debug is the configuration that runs the games; Release builds have crashed the guest), then zip `Payload/Madeira.app` into an IPA and sideload. Verified this session on the development machine.
+8. WoW64 (32-bit programs, optional): `build/wine-i386/build.sh` (i386 Wine farm
    -> `app/Madeira/i386-windows/`), `build/fex-wow64/build.sh` (FEX WOW64 module
    -> `app/Madeira/aarch64-windows/xtajit.dll`) and the aarch64 `wow64.dll` /
    `wow64win.dll`; see docs/WOW64.md, "Building". UNVERIFIED on macOS.
@@ -80,3 +85,28 @@ rebuild, signing and installation has NOT been performed. Until it is,
 docs/LICENSING.md keeps the relink capability marked unverified. The
 alternative the LGPL offers, shipping the application's object files, is
 not currently done.
+
+## External storage build preparation (2026-10-09)
+
+The pinned top-level Wine, FEX and DXMT revisions are now publicly accessible;
+Madeira Dock at `72558e416a390f3669457930f09a389e54f49556` was initialized
+successfully. Nested dependencies and the full native build remain unverified.
+The current local checkout lacks the native archives, toolchains and VC runtime
+resource required for a complete app build. See
+[EXTERNAL_STORAGE.md](EXTERNAL_STORAGE.md) for the exact attempt, provenance,
+missing inputs and a reproducible independently signed SSD data-access probe.
+`python3 tests/host/typecheck-ios.py` validates all production Swift sources
+without pretending to link the absent runtime. The Steam download host harness
+now supports both macOS native libraries and the existing Linux shims.
+
+The pinned llvm-mingw toolchain is now available for the controlled Windows
+fixture. Other native inputs are still absent. A reproducible mixed-source route
+is documented in [tests/device/ssd-runtime/README.md](../tests/device/ssd-runtime/README.md):
+`FRONTEND=source` compiles the checkout's 65 Swift sources against the hash-pinned
+published runtime. Three hidden native entry points forward to verified original
+implementations; no runtime instructions are changed. Source hashes, native input
+hashes and output hashes are recorded. This route compiled, signed, installed in
+the isolated SSD app, and opened its interface on iPad. Native bridge changes
+remain outside that binary and are separately host/syntax-tested. The test build
+uses a scoped C: alias for direct-launch CWD and refuses external direct 32-bit
+starts. Do not describe it as a complete source build.

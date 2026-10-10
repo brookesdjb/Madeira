@@ -1073,6 +1073,14 @@ void winios_session_reset(void) {
 }
 
 /* main thread only */
+#if defined(DEBUG) && DEBUG && defined(MADEIRA_AUTOMATION)
+static __weak UIWindow *g_automation_presentation_window;
+void winios_automation_set_presentation_window(void *window) {
+    /* Called by the main-thread presentation placeholder, never a guest path. */
+    g_automation_presentation_window = (__bridge UIWindow *)window;
+}
+#endif
+
 static void winios_ensure_compositor(void) {
     BOOL desk = winios_desktop_session();
     if (g_compositor_view) {
@@ -1086,8 +1094,11 @@ static void winios_ensure_compositor(void) {
     if (!desk && !winios_game_windows_enabled()) return;
     if (!desk) {
         UIWindow *win = nil;
+        #if defined(DEBUG) && DEBUG && defined(MADEIRA_AUTOMATION)
+        win = g_automation_presentation_window;
+        #endif
         for (UIWindow *w in UIApplication.sharedApplication.windows) {
-            if (w.isKeyWindow) { win = w; break; }
+            if (!win && w.isKeyWindow) { win = w; break; }
         }
         if (!win) win = UIApplication.sharedApplication.windows.firstObject;
         if (!win) return;
@@ -1114,8 +1125,11 @@ static void winios_ensure_compositor(void) {
         return;
     }
     UIWindow *win = nil;
+    #if defined(DEBUG) && DEBUG && defined(MADEIRA_AUTOMATION)
+    win = g_automation_presentation_window;
+    #endif
     for (UIWindow *w in UIApplication.sharedApplication.windows) {
-        if (w.isKeyWindow) { win = w; break; }
+        if (!win && w.isKeyWindow) { win = w; break; }
     }
     if (!win) win = UIApplication.sharedApplication.windows.firstObject;
     if (!win) return;

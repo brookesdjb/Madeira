@@ -634,7 +634,6 @@ static inline unsigned int wait_reply( struct __server_request_info *req )
  *    share the Mach task but not their loader lists), rebuilt every burst;
  *  - one sampler for the task, bursts of 4 passes 250 ms apart every 20 s,
  *    GameThread and RUNNING threads on every pass, everything else once. */
-static int ios_ts_armed;
 struct ios_ts_mod { uint64_t base, size; char name[40]; };
 struct ios_ts_map { uint64_t peb; int n; struct ios_ts_mod m[160]; };
 static struct ios_ts_map ios_ts_maps[6];
@@ -1819,6 +1818,41 @@ static void ios_thread_sampler_main(void)
          * sweep's span and bucket set move, a loop's do not. */
         ++gen; ios_guest_rip_profile( gen );   /* ml1123: every burst (was every third) */
     }
+}
+
+/* Optional task-wide diagnostics. Read all switches before dispatching any
+ * work, once per native app process (Wine pseudo-processes share this task).
+ * Unknown/empty values are off; MADEIRA_QUIET only controls the legacy profiler
+ * below and does not override an explicit request for these diagnostics. */
+static pthread_once_t ios_task_profilers_once = PTHREAD_ONCE_INIT;
+
+static int ios_profile_enabled( const char *name )
+{
+    const char *value = getenv( name );
+    return value && (!strcmp( value, "1" ) || !strcasecmp( value, "on" ) ||
+                     !strcasecmp( value, "yes" ) || !strcasecmp( value, "true" ));
+}
+
+static void ios_init_task_profilers(void)
+{
+    int threads = ios_profile_enabled( "MADEIRA_PROFILE_THREADS" );
+    int xp = ios_profile_enabled( "MADEIRA_PROFILE_XP" );
+    int stacks = ios_profile_enabled( "MADEIRA_PROFILE_STACKS" );
+
+    if (threads || xp || stacks)
+        wine_log_write( "[task-profile] enabled: threads=%d xp=%d stacks=%d (fixed until app restart)",
+                        threads, xp, stacks );
+    if (threads)
+        dispatch_async(dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{ ios_thread_sampler_main(); });
+    if (xp)
+        dispatch_async(dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{ ios_xprobe_main(); });
+    if (stacks)
+        dispatch_async(dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{ ios_wprof_main(); });
+}
+
+static void ios_start_task_profilers(void)
+{
+    pthread_once( &ios_task_profilers_once, ios_init_task_profilers );
 }
 
 
@@ -3250,7 +3284,10 @@ NTSTATUS unixcall_wine_server_handle_to_fd( void *args )
 int server_pipe( int fd[2] )
 {
     int ret;
-#ifdef HAVE_PIPE2
+#if defined(HAVE_PIPE2) && !defined(WINE_IOS)
+    /* A macOS-configured HAVE_PIPE2 can come from the iOS 27 SDK while this
+     * app still runs on iOS 26. Use pipe + fcntl on iOS instead of calling
+     * the weak-imported pipe2 entry point when it may be absent. */
     static BOOL have_pipe2 = TRUE;
 
     if (have_pipe2)
@@ -4565,23 +4602,16 @@ void server_init_process_done(void)
          * (unix side), or elsewhere — mapping the hot buckets tells us
          * where the ~1.4s/frame actually goes. Counts halve at each print
          * so the histogram tracks the current phase. */
-        /* ml875 [thread-sample]: ONE task-wide sampler (ml873 armed seven, one
-         * per pseudo-process, each suspending the others' threads). Body in
-         * ios_thread_sampler_main() above. */
-        if (__sync_bool_compare_and_swap(&ios_ts_armed, 0, 1))
-        {
-            dispatch_async(dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{ ios_thread_sampler_main(); });
-            dispatch_async(dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{ ios_xprobe_main(); });   /* ml1128 */
-            dispatch_async(dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{ ios_wprof_main(); });   /* ml1129 */
-        }
+        /* One owner for the task; only explicitly requested diagnostic jobs. */
+        ios_start_task_profilers();
         if (!getenv("MADEIRA_QUIET"))
         {
             /* iOS-Madeira 2026-07-05 quiet mode: the sampler thread_suspends
              * the game thread ~500x/s (each suspend+get_state+resume steals
              * wall time and adds jitter) — a few %% of frame time plus heat,
              * and heat is what caps ProMotion at 60. MADEIRA_QUIET (set in
-             * WineProcessBridge.m) skips the profiler entirely; comment the
-             * setenv out for diagnostic sessions. */
+             * WineProcessBridge.m) skips this legacy profiler. Task-wide
+             * diagnostics above have independent explicit opt-in switches. */
             pthread_t prof_pthread = pthread_self();
             mach_port_t prof_thread_initial = pthread_mach_thread_np(prof_pthread);
             dispatch_async(dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{

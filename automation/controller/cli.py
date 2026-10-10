@@ -1,12 +1,15 @@
 """Run as python -m automation.controller.cli from the repository root."""
 import argparse
+from contextlib import ExitStack
 import json
 import os
 from pathlib import Path
 import sys
+import time
 from .appium_controller import AppiumController
 from .device import AutomationError, DeviceControl, doctor, run
 from .workflows import Run, new_run, save_json
+from .reservation import reserve_device
 
 DEFAULT_BUNDLE = "com.willfaust.madeora"
 ROOT = Path(__file__).resolve().parents[2]
@@ -18,6 +21,10 @@ def parser():
     p.add_argument("--bundle-id", default=os.getenv("MADEIRA_BUNDLE_ID", DEFAULT_BUNDLE))
     p.add_argument("--team", default=os.getenv("MADEIRA_TEAM_ID"))
     p.add_argument("--wda-bundle", default=os.getenv("MADEIRA_WDA_BUNDLE_ID"))
+    p.add_argument("--transport", choices=["wired", "localNetwork"],
+                   default=os.getenv("MADEIRA_DEVICE_TRANSPORT", "wired"))
+    p.add_argument("--command-transport", choices=["socket", "xctest"], default="socket",
+                   help="Command/status transport for game-command and benchmark-capture")
     p.add_argument("--server", default="http://127.0.0.1:4723")
     p.add_argument("--output", default=str(ROOT / "automation/runs"))
     sub = p.add_subparsers(dest="command", required=True)
@@ -26,12 +33,31 @@ def parser():
     sub.add_parser("device-check")
     build = sub.add_parser("build")
     build.add_argument("--automation", action="store_true")
+    build.add_argument("--configuration", choices=["Debug", "Release"], default="Debug")
+    build.add_argument("--unsigned", action="store_true", help="Compile/inspect without signing or installing")
+    build.add_argument("--derived-data", help="Dedicated output directory; defaults to one per build variant")
+    build.add_argument("--setting", action="append", default=[], metavar="NAME=VALUE")
     install = sub.add_parser("install")
     install.add_argument("app", help="Signed .app directory; no uninstall or data reset")
     smoke = sub.add_parser("smoke")
     smoke.add_argument("--frontend", choices=["library", "developer"], default="library")
     actions = sub.add_parser("actions")
     actions.add_argument("file", help="JSON array of UI actions; one persistent Appium session")
+    from .game_control import OPERATIONS
+    game = sub.add_parser("game-command", help="Opted-in running app; never auto-launch, reset or force-stop a game")
+    game.add_argument("operation", choices=sorted(OPERATIONS))
+    game.add_argument("--library-id")
+    game.add_argument("--steam-app-id", type=int)
+    game.add_argument("--request-id")
+    checkpoint = sub.add_parser("game-checkpoint", help="Observe the owned Portal menu; never launch or stop a game")
+    checkpoint.add_argument("--seconds", type=int, default=120)
+    telemetry = sub.add_parser("summarize-telemetry", help="Offline raw native submission trace; no device mutation")
+    telemetry.add_argument("trace")
+    telemetry.add_argument("--budget-ms", type=float, default=1000 / 60)
+    benchmark = sub.add_parser("benchmark-capture", help="Owned game only; local timing, heartbeat and frozen trace export")
+    benchmark.add_argument("plan")
+    benchmark.add_argument("--warmup", type=int, default=60)
+    benchmark.add_argument("--seconds", type=int, default=180)
     sub.add_parser("jit-test")
     visual = sub.add_parser("compare-images")
     visual.add_argument("baseline")
@@ -94,62 +120,98 @@ def main(argv=None):
             result = compare_captures(args.baseline, args.candidate, args.output, calibration)
             print(json.dumps(result))
             return 0 if result["status"] == "within_threshold" else 1
+        if args.command == "summarize-telemetry":
+            from .telemetry import export_trace
+            result = export_trace(args.trace, args.output, args.budget_ms)
+            print(json.dumps(result))
+            return 0
         native = DeviceControl()
         if args.command == "devices":
             print(json.dumps({"devices": native.devices()}))
             return 0
         if args.command == "build":
-            if not args.team:
-                raise AutomationError("build_requires_--team")
-            arguments = ["xcodebuild", "-project", str(ROOT / "app/Madeira.xcodeproj"),
-                         "-scheme", "Madeira", "-configuration", "Debug",
-                         "-destination", "generic/platform=iOS", "-derivedDataPath",
-                         str(ROOT / "automation/derived-data"), f"DEVELOPMENT_TEAM={args.team}",
-                         f"MADEIRA_BUNDLE_IDENTIFIER={args.bundle_id}"]
-            if args.automation:
-                arguments.append("SWIFT_ACTIVE_COMPILATION_CONDITIONS=$(inherited) DEBUG MADEIRA_AUTOMATION")
-            # Signing must already be provisioned; do not change developer accounts.
-            run([*arguments, "build"], 1800)
-            print(json.dumps({"status": "built", "app": str(ROOT / "automation/derived-data/Build/Products/Debug-iphoneos/Madeira.app")}))
+            from .build import build_app
+            result = build_app(ROOT, args.bundle_id, args.team, args.configuration,
+                               args.automation, args.unsigned, args.derived_data, args.setting)
+            print(json.dumps(result))
             return 0
-        info = native.select(args.udid)
+        info = native.select(args.udid, args.transport)
         if args.command == "device-check":
             print(json.dumps({"status": "connected", "device": info}))
             return 0
-        if args.command == "install":
-            print(json.dumps(native.install_app(info["udid"], args.app, args.bundle_id)))
-            return 0
-        path = new_run(args.output)
-        device = AppiumController(args.server)
-        workflow = Run(device, native, info, args.bundle_id, path)
-        try:
-            workflow.step("connect", lambda: device.connect(info["udid"], args.bundle_id, args.team, args.wda_bundle))
-            if args.command == "smoke":
-                result = workflow.smoke(args.frontend)
-            elif args.command == "jit-test":
-                from .jit_probe import probe
-                result = probe(workflow)
-            else:
-                try:
-                    execute_actions(workflow, json.loads(Path(args.file).read_text()))
+        with reserve_device(info["udid"], "cli:" + args.command) as lease:
+            native.require_unlocked(info["udid"])
+            if args.command == "install":
+                print(json.dumps(native.install_app(info["udid"], args.app, args.bundle_id)))
+                return 0
+            path = new_run(args.output)
+            device = AppiumController(args.server)
+            workflow = Run(device, native, info, args.bundle_id, path)
+            workflow.report["reservation"] = lease
+            connection_started = time.time()
+            transports = ExitStack()
+            try:
+                workflow.step("connect", lambda: device.connect(info["udid"], args.bundle_id, args.team, args.wda_bundle))
+                if args.command in {"game-command", "benchmark-capture"} and args.command_transport == "socket":
+                    from .transport import attach_transport
+                    pids = native.app_process_ids(info["udid"], args.bundle_id)
+                    if len(pids) != 1:
+                        raise AutomationError("transport_requires_one_existing_process")
+                    transports.enter_context(attach_transport(device, native, info["udid"], args.bundle_id, pids[0],
+                        route="wifi" if args.transport == "localNetwork" else "usb"))
+                    workflow.report["command_transport"] = "paired_socket"
+                if args.command == "smoke":
+                    result = workflow.smoke(args.frontend)
+                elif args.command == "jit-test":
+                    from .jit_probe import probe
+                    result = probe(workflow)
+                elif args.command == "benchmark-capture":
+                    from .benchmark import capture
+                    workflow.report["benchmark"] = workflow.step("benchmark_capture", lambda:
+                        capture(workflow, json.loads(Path(args.plan).read_text()), args.warmup, args.seconds))
                     workflow.report["status"] = "passed"
-                except Exception:
-                    workflow.report["status"] = "failed"
-                    raise
-                finally:
                     result = workflow.finish(terminate=False)
-        except Exception as exc:
-            workflow.report["status"] = "failed"
-            workflow.report["error"] = str(exc) if isinstance(exc, AutomationError) else type(exc).__name__
-            # A session may not exist, so don't try a second install or guessed device.
-            if device.session:
-                result = workflow.finish(terminate=False)
-            else:
-                result = workflow.report
-                save_json(path / "report.json", result)
-        print(json.dumps({"status": result["status"], "report": str(path / "report.json"),
-                          "steps": result["steps"]}))
-        return 0 if result["status"] == "passed" else 1
+                elif args.command == "game-checkpoint":
+                    from .checkpoints import wait_for_portal_menu
+                    workflow.require_state(4)
+                    workflow.report["game_checkpoint"] = workflow.step("portal_menu_checkpoint",
+                        lambda: wait_for_portal_menu(device, path, seconds=args.seconds))
+                    workflow.report["status"] = "passed"
+                    result = workflow.finish(terminate=False)
+                elif args.command == "game-command":
+                    from .game_control import command
+                    workflow.require_state(4)
+                    reply = workflow.step("game_command", lambda: command(device, args.operation,
+                        library_id=args.library_id, steam_app_id=args.steam_app_id, request_id=args.request_id))
+                    workflow.report["game_command"] = reply
+                    workflow.report["status"] = "failed" if reply["status"] == "rejected" else "passed"
+                    if reply["status"] == "rejected": workflow.report["error"] = reply.get("code")
+                    result = workflow.finish(terminate=False)
+                else:
+                    try:
+                        execute_actions(workflow, json.loads(Path(args.file).read_text()))
+                        workflow.report["status"] = "passed"
+                    except Exception:
+                        workflow.report["status"] = "failed"
+                        raise
+                    finally:
+                        result = workflow.finish(terminate=False)
+            except Exception as exc:
+                workflow.report["status"] = "failed"
+                workflow.report["error"] = str(exc) if isinstance(exc, AutomationError) else type(exc).__name__
+                # A session may not exist, so don't try a second install or guessed device.
+                if device.session:
+                    result = workflow.finish(terminate=False)
+                else:
+                    from .startup_evidence import wda_startup_evidence
+                    workflow.report["evidence"]["wda_startup"] = wda_startup_evidence(connection_started)
+                    result = workflow.report
+                    save_json(path / "report.json", result)
+            finally:
+                transports.close()
+            print(json.dumps({"status": result["status"], "report": str(path / "report.json"),
+                              "steps": result["steps"]}))
+            return 0 if result["status"] == "passed" else 1
     except (AutomationError, OSError, ValueError) as exc:
         error = str(exc) if isinstance(exc, AutomationError) else type(exc).__name__
         print(json.dumps({"status": "blocked", "error": error}))

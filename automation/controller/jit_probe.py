@@ -5,11 +5,43 @@ from .device import AutomationError
 
 
 def snapshot(device):
-    device.tap_id("madeira.automation.refresh")
-    result = json.loads(device.value("madeira.automation.status"))
-    if not isinstance(result, dict) or result.get("schema_version") != 1:
-        raise AutomationError("unsupported_probe_schema")
-    return result
+    transport = getattr(device, "command_transport", None)
+    if transport is not None:
+        return transport.snapshot()
+    # XCTest can return a pre-refresh SwiftUI value after the button click.
+    # Require a newer publication, rather than treating old replay completion
+    # or readiness as the result of this refresh.
+    previous = -1
+    try:
+        old = json.loads(device.value("madeira.automation.status"))
+        if isinstance(old, dict) and type(old.get("sequence")) is int:
+            previous = old["sequence"]
+    except (ValueError, AutomationError):
+        pass
+    try:
+        device.tap_id("madeira.automation.refresh")
+    except AutomationError as exc:
+        if str(exc) != "no such element":
+            raise
+        # The normal setup sheet hides the probe. Identify this prerequisite
+        # without dismissing a dialog or reading potentially private error text.
+        try:
+            device.find("JIT setup", timeout=0)
+        except AutomationError as setup_error:
+            if str(setup_error) != "no such element":
+                raise
+            raise exc
+        raise AutomationError("jit_setup_required") from None
+    deadline = time.monotonic() + 5
+    while True:
+        result = json.loads(device.value("madeira.automation.status"))
+        if not isinstance(result, dict) or result.get("schema_version") != 1 or type(result.get("sequence")) is not int:
+            raise AutomationError("unsupported_probe_schema")
+        if result["sequence"] > previous:
+            return result
+        if time.monotonic() >= deadline:
+            raise AutomationError("probe_status_not_refreshing")
+        time.sleep(0.05)
 
 
 def wait_for(workflow, condition, seconds=100, clock=time.monotonic, pause=time.sleep):
@@ -26,11 +58,30 @@ def wait_for(workflow, condition, seconds=100, clock=time.monotonic, pause=time.
             background_since = background_since or clock()
             if clock() - background_since >= 10:
                 workflow.device.activate_app(workflow.bundle_id)
+                workflow.report.setdefault("foreground_events", []).append({"action": "activate_existing_process", "observed_state": state})
                 background_since = clock()
             pause(1)
             continue
         background_since = None
-        result = snapshot(workflow.device)
+        started = time.perf_counter()
+        try:
+            result = snapshot(workflow.device)
+        except AutomationError as exc:
+            # Opening StikDebug/Shortcuts can race the foreground-state query.
+            # Keep the original process and bounded deadline during that switch.
+            if str(exc) == "no such element":
+                observed = workflow.device.app_state(workflow.bundle_id)
+                if observed in (0, 1):
+                    raise AutomationError("Madeira_terminated_during_JIT_probe") from None
+                if observed != 4:
+                    pause(1)
+                    continue
+            raise
+        workflow.report.setdefault("ui_refresh_timings", []).append({
+            "sequence": result.get("sequence"),
+            "round_trip_ms": round((time.perf_counter() - started) * 1000, 2),
+            "debugger_attached": result.get("debugger_attached"),
+        })
         if result.get("sequence") == last_sequence:
             raise AutomationError("probe_status_not_refreshing")
         last_sequence = result.get("sequence")
@@ -47,11 +98,14 @@ def probe(workflow):
     device, bundle = workflow.device, workflow.bundle_id
     try:
         # Don't terminate a potentially live game just to start the experiment.
-        if device.app_state(bundle) not in (0, 1):
+        if not workflow.target_stopped():
             raise AutomationError("jit_probe_requires_Madeira_stopped_before_start")
-        workflow.step("launch_test_mode", lambda: device.launch_app(bundle, ["--madeira-automation"]))
+        workflow.probe_pid = workflow.step("launch_test_mode", lambda: workflow.native.launch_probe_process(workflow.info["udid"], bundle))
+        workflow.report["launch_backend"] = "devicectl"
         before = workflow.step("read_initial_state", lambda: snapshot(device))
         workflow.report["jit_before"] = before
+        if before.get("pid") != workflow.probe_pid:
+            raise AutomationError("probe_launch_pid_mismatch")
         if before.get("wine_running") or before.get("fex_test") != "NOT_RUN":
             raise AutomationError("jit_probe_requires_fresh_idle_process")
         workflow.step("request_existing_jit", lambda: device.tap_id("madeira.automation.enable-jit"))
@@ -65,10 +119,11 @@ def probe(workflow):
         # Evidence before restart: app logs rotate on launch.
         workflow.diagnostics()
         workflow.report["pre_restart_evidence"] = dict(workflow.report["evidence"])
-        workflow.step("terminate_for_relaunch", lambda: device.terminate_app(bundle))
-        workflow.step("verify_stopped", lambda: workflow.require_state(1))
-        workflow.step("relaunch_test_mode", lambda: device.launch_app(bundle, ["--madeira-automation"]))
+        workflow.step("terminate_for_relaunch_and_verify_native", workflow.stop_owned_probe)
+        workflow.probe_pid = workflow.step("relaunch_test_mode", lambda: workflow.native.launch_probe_process(workflow.info["udid"], bundle))
         after = workflow.step("read_after_relaunch", lambda: snapshot(device))
+        if after.get("pid") != workflow.probe_pid:
+            raise AutomationError("probe_relaunch_pid_mismatch")
         if after.get("pid") == before.get("pid") or after.get("fex_test") != "NOT_RUN":
             raise AutomationError("fresh_process_not_confirmed")
         workflow.report["jit_after_relaunch"] = after

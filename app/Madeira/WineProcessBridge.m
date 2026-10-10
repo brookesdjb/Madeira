@@ -28,6 +28,7 @@
 #include <sys/sysctl.h>
 
 #include "WineProcessBridge.h"
+#include "SteamStorageNative.h"
 #include "WineServerBridge.h"
 #include "PrefixExtractor.h"
 #include "FEXBridge.h"  // fex_get_jit_write_offset()
@@ -511,6 +512,10 @@ static uint16_t madeira_target_machine(const char *exe, const char *prefix, NSSt
             return 0;
         for (char *p = probe + skip; *p; p++) if (*p == '\\') *p = '/';
     }
+    else if ((exe[0] == 'E' || exe[0] == 'e') && exe[1] == ':' && exe[2] == '\\')
+    {
+        if (madeira_storage_native(prefix, exe, probe, sizeof(probe))) return 0;
+    }
     else if (strchr(exe, '\\') || (exe[0] && exe[1] == ':'))
         return 0;
     else
@@ -927,6 +932,33 @@ static void *wine_process_thread(void *arg) {
          * so the next log proves it arrived rather than leaving us to infer it. */
         setenv("FNA3D_FORCE_DRIVER", "D3D11", 0);
 
+        /* OpenGL backend for the winios GL driver (build/win32u-unix/opengl_ios.c):
+         *   zink - desktop OpenGL 3.3-4.x: Mesa OSMesa + Zink on MoltenVK, from the
+         *          bundle's gl/ folder (build/mesa-ios, build/moltenvk-ios)
+         *   gles - Apple's OpenGL ES 3.0 (EAGL); desktop-GL-only apps fail
+         * madeira.cfg `gl-backend = zink|gles` chooses; otherwise zink when its
+         * dylibs are bundled. MADEIRA_GL_BACKEND in the environment wins over both.
+         * The driver falls back to gles by itself if Zink cannot start. */
+        {
+            NSString *glDir = [[[NSBundle mainBundle] bundlePath] stringByAppendingPathComponent:@"gl"];
+            BOOL haveZink = [[NSFileManager defaultManager] fileExistsAtPath:
+                                [glDir stringByAppendingPathComponent:@"libOSMesa.dylib"]];
+            char glb[16] = "";
+            if (!madeira_cfg_get("gl-backend", glb, sizeof glb) || !glb[0])
+                strlcpy(glb, haveZink ? "zink" : "gles", sizeof glb);
+            setenv("MADEIRA_GL_BACKEND", glb, 0);
+            setenv("MADEIRA_GL_DIR", glDir.UTF8String, 1);
+            LOG("OpenGL backend: %{public}s (zink bundled: %d)", getenv("MADEIRA_GL_BACKEND"), haveZink);
+
+            /* With the GLES backend there is no desktop GL context, so make LOVE ask
+             * for OpenGL ES first. LOVE 11 checks this SDL hint (read from the
+             * environment) before trying desktop GL; SDL then creates the context
+             * through WGL_EXT_create_context_es2_profile, which that backend
+             * advertises. overwrite=0: an explicit setting still wins. */
+            if (!strcmp(getenv("MADEIRA_GL_BACKEND"), "gles"))
+                setenv("LOVE_GRAPHICS_USE_OPENGLES", "1", 0);
+        }
+
         /* ml720: make Mono report unhandled exceptions and assembly-load failures.
          *
          * DIAGNOSTIC — revisit before shipping; this is chatty and costs startup time.
@@ -1033,6 +1065,7 @@ static void *wine_process_thread(void *arg) {
         const char *dock_session = getenv("MADEIRA_DOCK_SESSION");
         const char *direct_app = getenv("MADEIRA_STEAM_APPID");    /* set by the library for one direct Steam start (Start with: The game); not a setting */
         const char *direct_path = getenv("MADEIRA_STEAM_APPPATH"); /* that game's install folder, with MADEIRA_STEAM_APPID; not a setting */
+        char direct_native[PATH_MAX];
         if (dock_session && dock_session[0] == '1') {
             unsetenv("SteamAppPath");
             unsetenv("SteamGameId");
@@ -1040,7 +1073,8 @@ static void *wine_process_thread(void *arg) {
             dprintf(STDERR_FILENO, "[steam-env] Madeira Dock session: no fixed Steam game identity published\n");
         } else if (direct_app && direct_app[0] && strlen(direct_app) <= 10 &&
             strspn(direct_app, "0123456789") == strlen(direct_app) &&
-            direct_path && (direct_path[0] == 'C' || direct_path[0] == 'c') && direct_path[1] == ':' &&
+            direct_path && ((direct_path[0] == 'C' || direct_path[0] == 'c') ||
+                ((direct_path[0] == 'E' || direct_path[0] == 'e') && !madeira_storage_native(g_prefix_path, direct_path, direct_native, sizeof(direct_native)))) && direct_path[1] == ':' &&
             direct_path[2] == '\\' && strlen(direct_path) < 1024 && !strstr(direct_path, "..")) {
             setenv("SteamAppPath", direct_path, 1);
             setenv("SteamGameId", direct_app, 1);
@@ -1576,14 +1610,33 @@ static void *wine_process_thread(void *arg) {
          * services batch) is what starts). */
         const char *launch_workdir = getenv("MADEIRA_WORKDIR");   /* set by the library for one launch: the working folder (Steam's, or the entry's); not a setting */
         char workdir[512] = "";
-        if (launch_workdir && (launch_workdir[0] == 'C' || launch_workdir[0] == 'c') && launch_workdir[1] == ':' &&
+        if (launch_workdir && (launch_workdir[0] == 'C' || launch_workdir[0] == 'c' || launch_workdir[0] == 'E' || launch_workdir[0] == 'e') && launch_workdir[1] == ':' &&
             launch_workdir[2] == '\\' && launch_workdir[3] && !strstr(launch_workdir, "..") &&
             strlen(launch_workdir) < sizeof(workdir) - 2)
             snprintf(workdir, sizeof(workdir), "%s", launch_workdir);
         unsetenv("MADEIRA_WORKDIR");
+        if (!workdir[0] && (madeira_exe[0] == 'E' || madeira_exe[0] == 'e') && madeira_exe[1] == ':') {
+            const char *last = strrchr(madeira_exe, '\\');
+            if (last && last >= madeira_exe + 2 && (size_t)(last - madeira_exe) < sizeof(workdir) - 2) {
+                size_t n = (size_t)(last - madeira_exe);
+                memcpy(workdir, madeira_exe, n); workdir[n++] = '\\'; workdir[n] = 0;
+            }
+        }
         /* ml1163: a typed folder may end in '\\'; MADEIRA_INITIAL_CWD gets exactly one. */
         for (size_t n = strlen(workdir); n > 3 && workdir[n - 1] == '\\'; n--) workdir[n - 1] = 0;
-        if (workdir[0]) {
+        if (workdir[0] == 'E' || workdir[0] == 'e') {
+            char native[PATH_MAX], wine_cwd[520];
+            if (madeira_storage_native(g_prefix_path, workdir, native, sizeof(native)) || chdir(native)) {
+                dprintf(STDERR_FILENO, "[WineProc] external working folder unavailable; launch stopped\n");
+                wine_launched_process_did_exit((int)0xC000003A);
+                g_wine_running = 0;
+                wineserver_stop();
+                return NULL;
+            }
+            setenv("PWD", native, 1);
+            snprintf(wine_cwd, sizeof(wine_cwd), "%s%s", workdir, workdir[strlen(workdir) - 1] == '\\' ? "" : "\\");
+            setenv("MADEIRA_INITIAL_CWD", wine_cwd, 1);
+        } else if (workdir[0]) {
             char unix_dir[1024], windir[512], wine_cwd[520];
             snprintf(windir, sizeof(windir), "%s", workdir + 3);
             for (char *p = windir; *p; p++) if (*p == '\\') *p = '/';

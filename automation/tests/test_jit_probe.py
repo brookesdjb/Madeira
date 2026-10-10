@@ -2,7 +2,7 @@ import json
 from pathlib import Path
 import pytest
 from automation.controller.device import AutomationError
-from automation.controller.jit_probe import wait_for, probe
+from automation.controller.jit_probe import snapshot, wait_for, probe
 from automation.controller.workflows import Run
 
 
@@ -37,6 +37,8 @@ class ProbeDevice:
         return json.dumps({"schema_version": 1, "sequence": self.sequence, "pid": self.pid,
                            "jit_ready": self.jit, "debugger_attached": self.jit, "jit_method": "builtIn", "fex_test": self.fex,
                            "fex_result": self.result, "wine_running": False})
+    def find(self, identifier, timeout=10):
+        raise AutomationError("no such element")
     def screenshot(self, path):
         Path(path).write_bytes(b"fixture")
         return str(path)
@@ -46,11 +48,20 @@ class ProbeDevice:
 
 
 class Native:
+    def __init__(self, device): self.device = device
     def application_log(self, *args): return []
+    def app_process_ids(self, *args): return [self.device.pid] if self.device.state != 1 else []
+    def launch_probe_process(self, udid, bundle):
+        self.device.launch_app(bundle, ["--madeira-automation"])
+        return self.device.pid
+    def terminate_probe_process(self, udid, bundle, pid):
+        assert pid == self.device.pid
+        self.device.terminate_app(bundle)
+        return {"backend": "devicectl", "confirmed_stopped": True}
 
 
 def workflow(tmp_path, device):
-    return Run(device, Native(), {"udid": "test"}, "test.madeira", tmp_path)
+    return Run(device, Native(device), {"udid": "test"}, "test.madeira", tmp_path)
 
 
 @pytest.mark.parametrize("result", [42, -1])
@@ -63,6 +74,8 @@ def test_probe_only_passes_with_observed_fex_result_and_relaunch(tmp_path, resul
         assert report["reactivation_required"] is True
         assert report["compatibility"]["detach_survival"] == "not_tested"
         assert "pre_restart_evidence" in report
+        assert report["ui_refresh_timings"]
+        assert all(t["round_trip_ms"] >= 0 for t in report["ui_refresh_timings"])
     else:
         assert "compatibility" not in report
     assert device.state == 1 and not device.session
@@ -91,13 +104,67 @@ def test_unexpected_termination_stops_probe(tmp_path):
         wait_for(workflow(tmp_path, ProbeDevice()), lambda _: True)
 
 
+def test_setup_sheet_is_reported_as_provisioning_instead_of_unresponsive_UI():
+    class SetupDevice(ProbeDevice):
+        def tap_id(self, identifier): raise AutomationError("no such element")
+        def find(self, identifier, timeout=10):
+            assert identifier == "JIT setup"
+            return "setup-sheet-title"
+    with pytest.raises(AutomationError, match="jit_setup_required"):
+        snapshot(SetupDevice())
+
+
+def test_foreground_switch_race_preserves_process_and_retries_with_deadline(tmp_path):
+    class SwitchingDevice(ProbeDevice):
+        def __init__(self):
+            super().__init__(); self.state = 4; self.switch = True
+        def tap_id(self, identifier):
+            if self.switch:
+                self.switch = False; self.state = 3
+                raise AutomationError("no such element")
+            self.jit = True
+            super().tap_id(identifier)
+    device = SwitchingDevice()
+    ticks = iter(range(100))
+    r = wait_for(workflow(tmp_path, device), lambda s: s["jit_ready"], seconds=50,
+                 clock=lambda: next(ticks), pause=lambda _: None)
+    assert r["pid"] == 20 and device.terminations == 0
+
+
+def test_termination_between_foreground_query_and_refresh_is_not_a_UI_failure(tmp_path):
+    class ExitingDevice(ProbeDevice):
+        def tap_id(self, identifier):
+            self.state = 1
+            raise AutomationError("no such element")
+    device = ExitingDevice()
+    device.state = 4
+    with pytest.raises(AutomationError, match="Madeira_terminated_during_JIT_probe"):
+        wait_for(workflow(tmp_path, device), lambda _: True)
+    assert device.terminations == 0
+
+
 def test_probe_source_is_double_compile_gated_and_runtime_opt_in():
     # This is a packaging guard, NOT a Swift compile or physical-device test.
     path = Path(__file__).resolve().parents[2] / "app/Madeira/ContentView.swift"
     source = path.read_text()
     marker = "#if DEBUG && MADEIRA_AUTOMATION"
-    assert source.count(marker) == 3
-    declaration = source[source.rindex(marker):]
+    assert source.count(marker) >= 7
+    probe = source.index("@MainActor final class AutomationProbe")
+    assert "#endif" not in source[source.rfind(marker, 0, probe):probe]
+    declaration = source[probe:]
     assert 'arguments.contains("--madeira-automation")' in declaration
     assert declaration.rstrip().endswith("#endif")
     assert "run() // Existing ContentView.runFEXTest" in declaration
+
+
+def test_refresh_waits_for_new_swiftui_publication():
+    class DelayedDevice(ProbeDevice):
+        def __init__(self):
+            super().__init__(); self.reads = 0; self.clicked = False
+        def tap_id(self, identifier): self.clicked = True
+        def value(self, identifier):
+            self.reads += 1
+            return json.dumps({"schema_version":1,"sequence":int(self.clicked and self.reads >= 4)})
+    device = DelayedDevice()
+    assert snapshot(device)["sequence"] == 1
+    assert device.reads == 4

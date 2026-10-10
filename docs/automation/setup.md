@@ -2,9 +2,10 @@
 
 ## Current validation boundary
 
-The controller's HTTP protocol and failure handling are tested on Linux with a
-fake Appium server. No physical iPad run or Xcode compile has occurred in this
-implementation session. Run the following on your Mac. First provisioning,
+The controller's HTTP protocol and failure handling are tested with a fake
+Appium server. Mac compilation/signing and binary guard checks are now verified;
+see [Mac validation](mac-validation.md). Physical UI smoke now passes on the provisioned M5 iPad; standalone built-in JIT/exit-42 coexistence
+passes in two consecutive runs; normal-game acceptance remains pending. Run the following on your Mac. First provisioning,
 onboarding and any OS trust prompts require a person. The controller does not
 accept those prompts, change accounts, erase data or install certificates.
 
@@ -24,6 +25,13 @@ accept those prompts, change accounts, erase data or install certificates.
    profile. Trust/enable its developer app if the device asks. WDA first launch
    may require additional Xcode/manual setup; stop and resolve it rather than
    retrying indefinitely.
+   On the iPad enable **Settings → Developer → Enable UI Automation** and keep
+   the device unlocked. The actual first run here compiled/installed WDA but
+   failed during XCTest initialization with “Timed out while enabling automation
+   mode.” The timeout persisted after the owner enabled the switch. Check for
+   a separate XCTest passcode/permission prompt; the timeout alone does not prove
+   that the switch is disabled. This one-time device setting is required by Appium's
+   [device preparation guide](https://appium.github.io/appium-xcuitest-driver/latest/getting-started/device-setup/).
 4. Install Python 3.10+ and Node 24 (or a compatible engine listed in
    automation/package.json). From repository root run `make automation-setup`.
    Appium 3.8.0 / XCUITest 12.16.0 are pinned with npm's lockfile; the driver
@@ -43,8 +51,9 @@ make device-check
 
 Unknown pairing/Developer Mode/schema information fails closed. Discovery
 includes wired/network transport rather than pretending every paired device is
-connected. The initial proof should use `transport: wired`; investigate any
-network transport before drawing conclusions about USB behavior.
+connected. Physical CLI commands default to `--transport wired` and reject a
+device reached over Wi-Fi. Explicit `--transport localNetwork` enables later
+network work; investigate that transport before drawing conclusions about USB.
 
 ## Build and install
 
@@ -54,19 +63,53 @@ order. A clean checkout does not include every necessary build input.
 
 ```sh
 make device-build
-make device-install APP="$PWD/automation/derived-data/Build/Products/Debug-iphoneos/Madeira.app"
+make device-install APP="$PWD/automation/derived-data/debug/Build/Products/Debug-iphoneos/Madeira.app"
+
+# Debug-only JIT probe, in a separate output directory:
+make device-build BUILD_FLAGS="--automation"
+# Compile/check Release without enabling the probe:
+make device-build BUILD_FLAGS="--configuration Release"
+# Compile and inspect without signing (cannot be installed):
+make device-build BUILD_FLAGS="--unsigned"
 ```
 
-Build selects the existing Madeira scheme and Debug configuration, overrides
-team and bundle ID, and uses dedicated derived data. Signing must already be
-provisioned; automatic account/provisioning changes are not enabled. If signing
-fails, run the documented xcodebuild command locally to inspect private errors.
-The CLI suppresses arbitrary compiler/tool output to avoid exporting credentials.
+Build selects the existing Madeira scheme, overrides team and bundle ID, and
+uses separate `debug`, `automation-debug`, and `release` derived data by default.
+`--derived-data` selects another dedicated directory. On this Mac the existing
+native components require `--setting MTL_LANGUAGE_REVISION=Metal31`; pass that
+through BUILD_FLAGS. `--automation --configuration Release` is rejected.
+Successful builds verify the actual compiled app's probe inclusion/exclusion,
+record binary SHA-256 values, and verify signed bundles with codesign.
+Signed builds clean only that variant's isolated products first: the existing
+bundle scripts rewrite nested resources on incremental builds, and Xcode can
+skip the outer CodeSign, producing an invalid resource seal despite reporting
+BUILD SUCCEEDED. Unsigned compilation can remain incremental.
+Build reports and owner-only compiler logs are retained under
+`automation/runs/builds/`, including failures. Compiler output stays local.
+Signing must already be provisioned; automatic account/provisioning changes are
+not enabled. If signing fails, inspect the private build log locally. A separate
+automation bundle ID requires its own provisioning profile with Increased Memory
+Limit; a wildcard profile alone lacks this entitlement. Complete that one-time
+Xcode provisioning with your developer account before a signed harness build.
 Native install accepts a signed .app directory and verifies its bundle ID before
-installation. IPA unpacking/install is not implemented; use the .app from your
+installation. It inspects the installed target's bundle URL and processes and
+refuses to install over a running target. IPA unpacking/install is not implemented; use the .app from your
 build (do not uninstall an existing app, which would erase its data).
 
+If Xcode's UI shows a signed-in developer account but xcodebuild still reports
+“No Accounts,” create the dedicated test bundle's development profile through a
+Build in Xcode's UI, using your team and the Increased Memory Limit capability.
+The CLI can then sign with that existing profile without automatic account
+changes. This was the successful provisioning route on this Mac.
+
 ## First end-to-end proof
+
+All physical CLI commands use the [shared device reservation](device-reservation.md)
+before installation or Appium connection. They also query current lock state
+and return `device_locked_requires_owner_unlock` before any mutation when a
+passcode is required. `unlockedSinceBoot` does not establish current unlock. Competing worktrees fail immediately
+instead of taking the device from a live run. Performance tools must use the same
+reservation; see issue #2. Do not delete its persistent lock files.
 
 In one terminal:
 
@@ -86,9 +129,12 @@ Madeira must be stopped before smoke begins, so an active game is never killed
 by a smoke-test preflight. The library smoke selects Library, takes a screenshot, opens Settings, finds the
 existing JIT setup button without activating it, returns to Library, verifies
 its selected state, takes another screenshot, collects diagnostics and
-terminates Madeira. The developer variant opens/closes All settings. Explicit
+terminates Madeira. The developer variant opens/closes All settings in portrait
+and restores the prior orientation. Both use a process-only frontend override,
+without rewriting the persistent interface choice. Explicit
 accessibility identifiers have been added to these existing controls; their
-propagation through SwiftUI's iPad tab bar still needs physical verification.
+propagation through SwiftUI's iPad tab bar is now physically verified. Hidden
+controls behind a sheet do not satisfy the controller's visibility check.
 Do not substitute guessed coordinates and call that a validated identifier test.
 
 Reports are timestamped under automation/runs with owner-only permissions and
@@ -100,6 +146,9 @@ running; unexpected termination does not prove a crash. Historical device crash
 report counts are explicitly unattributed. App/system logs export only a fixed
 vocabulary of known Madeira diagnostic events, not complete log text. Screenshots
 can show private UI; keep them local and do not capture sign-in screens.
+If session creation fails, the controller also inspects this run's local XCTest
+result bundle and retains fixed failure codes, such as
+`ui_automation_mode_timeout`, without exporting arbitrary diagnostic text.
 
 ## Agent UI commands
 
@@ -170,3 +219,40 @@ MADEIRA_RUN_JIT_PHYSICAL=1 make automation-test
 
 These run the same CLI workflows and require a running Appium server. Ordinary
 `make automation-test` performs host-only validation and does not touch a device.
+
+The standalone JIT probe uses native devicectl launch/termination with exact
+main-app PID checks and WDA for status/buttons/screenshots. Its launch variant
+passes repeated hardware validation; see jit-compatibility.md. Auto-Lock still
+requires owner unlock before another run.
+The native exit-42 fixture is compiled only into opted-in Debug, with the same
+ELF loader as the normal exit-0 Hello World test.
+
+
+## Direct command connection
+
+Install `iproxy` (libusbmuxd) on the Mac. Use the automation-enabled build and
+launch it with `--madeira-automation`. The socket CLI requires an already-running
+process; it never launches or replaces a game merely to attach. See
+[protocol.md](protocol.md#paired-command-transport-v1) for the framing, security
+boundary, disconnect semantics and validation limits.
+
+For a continuous test, hold the existing device reservation around this scope:
+
+```python
+from automation.controller.transport import attach_transport
+from automation.controller.game_control import command
+from automation.controller.jit_probe import snapshot
+
+# device is the connected Appium controller; pid is the verified current
+# Madeira main PID. The caller already holds reserve_device(udid, ...).
+with attach_transport(device, native, udid, bundle_id, pid, route="usb"):
+    state = snapshot(device)  # Direct request/reply, no keyboard or Refresh tap.
+    reply = command(device, "get_game_status")
+    # Existing benchmark.capture uses this connection and refreshes every 2 s.
+```
+
+Use `route="wifi"` only after wireless pairing/discovery is verified. First USB
+pairing/provisioning may still be necessary, and the existing JIT bootstrap is
+separate from this command channel. The route switch does not itself establish
+wireless device readiness. Keep the device connection/power conditions identical
+across paired performance runs, since those conditions may affect thermals.

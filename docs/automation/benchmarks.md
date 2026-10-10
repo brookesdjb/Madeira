@@ -44,3 +44,51 @@ must pass before implementing the dependent game lifecycle and input milestones.
 
 Offline screenshot checks are available now through `compare-images`; calibrate
 crop and tolerances with actual captures before using them as a rendering gate.
+
+## Shared telemetry contract (issues #2 and #14)
+
+`automation.controller.telemetry` owns the version 1 **consumer** for #14.
+Issue #2 owns the native producer; there is no second sampler. Run:
+
+```sh
+python -m automation.controller.cli summarize-telemetry /private/submission-trace.json
+```
+
+This is an offline import; it neither discovers nor mutates a device. Reports
+and validated raw data go into owner-only `automation/runs` directories.
+It cannot create timing samples from the overlay or the existing Present logs.
+The native producer, replay runner and paired physical trials remain pending.
+
+The exact input keys are `schema_version` (integer 1), `clock`
+(`clock_monotonic_ns`), `scope` (`present_submission`), `capture_id`
+(1–64 ASCII letters/digits/underscore/hyphen), `complete` (boolean),
+`dropped_samples` (nonnegative integer), and `samples` (array). Each sample
+contains exactly `sequence` (positive integer) and `timestamp_ns` (nonnegative
+integer); both must fit signed 64 bits. Sequence numbers are contiguous within
+one capture and timestamps strictly increase. All samples belong to the same
+process and clock; a restart requires a new capture. Two timestamps yield one
+interval. The first event must not be assigned an invented preceding interval.
+
+The producer must stop/freeze before export, retain at most 250,000 events,
+report loss/overflow, and use actual individual events. The importer rejects
+loss, incomplete captures, gaps/resets, duplicate keys, unknown fields,
+nonmonotonic clocks and files over 32 MiB. It emits submission interval
+p50/p95/p99 using nearest rank, submission rate in Hz and over-budget intervals.
+These describe **Present submission cadence**, not visible FPS, GPU time or CPU
+encoding. Those measurements are explicitly null. It makes no 1% low claim.
+Do not feed this output into the older rendered-frame CSV summarizer.
+
+The existing native boundary is `madeira_log_present_cadence` in
+`dxmt/src/winemetal/unix/winemetal_unix.c`, called before Metal's presentation
+request. Its counter can describe submitted work; RAW mailbox frames and
+multiple surfaces prevent equating it with displayed gameplay. The source also
+records an earlier `presentedTime == 0` failure. Any future visible-frame producer
+must establish its clock/accuracy on the physical device before extending this
+contract. Native collection must remain opt-in and absent from normal Release,
+with disabled/enabled overhead measured before interpreting differences.
+
+Trace import deliberately cannot certify a device measurement. A benchmark run
+must separately supply source/dirty state, installed binary hashes, submodule
+pins, device model/OS, game/scene, resolution/settings, capture policy,
+warmup/measurement duration, cache state, thermal conditions and exit evidence.
+Private IDs and credentials must stay out of shared reports.

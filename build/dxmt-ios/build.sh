@@ -177,7 +177,13 @@ else
 fi
 
 echo "=== winemetal unix (Objective-C) ==="
-compile_objc "$DXMT_SRC/winemetal/unix/winemetal_unix.c" winemetal_unix
+WINEMETAL_SOURCE="$DXMT_SRC/winemetal/unix/winemetal_unix.c"
+if [ "${MADEIRA_FRAME_CAPTURE:-0}" = 1 ]; then
+    python3 "$BUILD_DIR/stage-frame-capture.py" "$WINEMETAL_SOURCE" "$OBJ_DIR/winemetal_capture.c"
+    WINEMETAL_SOURCE="$OBJ_DIR/winemetal_capture.c"
+    INCLUDES="$INCLUDES -I$DXMT_SRC/winemetal/unix"
+fi
+compile_objc "$WINEMETAL_SOURCE" winemetal_unix
 compile_objc "$DXMT_SRC/winemetal/unix/cache.c"          cache
 
 echo "=== airconv (C++ 20, needs LLVM headers) ==="

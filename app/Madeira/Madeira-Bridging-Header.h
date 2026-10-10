@@ -22,6 +22,8 @@ void wine_set_ui_log_callback(wine_ui_log_callback_t cb);
 // DXMT present counter (winemetal_unix.c) — for SwiftUI FPS overlay
 #include <stdint.h>
 uint64_t madeira_get_present_count(void);
+// DXMT presents plus OpenGL presents (Winios/WiniosGL.m)
+uint64_t madeira_frame_count(void);
 // ml1174: GPU busy time for the performance overlay (winemetal_unix.c). While
 // enabled, each committed command buffer adds its GPU time (union) on completion.
 void madeira_gpu_meter_enable(int on);
@@ -73,3 +75,5 @@ int madeira_d3d12_canary_run(const char *fixture_dir, const char *dylib_path,
 int madeira_d3d12_canary_run_log(const char *fixture_dir, const char *dylib_path,
                                  void (*sink)(const char *), const char *log_path,
                                  const char *build_id);
+
+#include "AutomationFrameCapture.h"

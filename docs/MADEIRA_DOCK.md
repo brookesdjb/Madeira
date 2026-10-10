@@ -481,3 +481,25 @@ credentials:
   ASan/UBSan and ThreadSanitizer (top-level windows only, one path lookup per
   process, frames and swapchains, capacity, the born-minimized restore and its
   switch), the driver's path form, and the wiring and glyph row.
+
+## External storage
+
+The current pinned source is `72558e416a390f3669457930f09a389e54f49556`.
+Its `src/launch.c` validates the normalized actual install path against the host's
+expected path without restricting the drive letter to C:. External games use
+`E:\steamapps\common\<folder>`. The app validates the saved folder identity,
+retains coordinated scoped access through the session, registers E: in Steam's
+libraryfolders metadata and passes that E: install path to Dock. Installer lookup
+uses the same external root; the registry and generated installer scripts remain
+internal. Disconnected records are retained and require access before launch.
+
+The controlled Windows EXE/DLL/relative-asset/save fixture and an actual Steam
+SSD download passed on iPad. The preserved binary's Valve client rejected E:
+as unmounted and Dock returned 41. The mixed-source diagnostic build therefore
+registers the scoped `C:\MadeiraExternalLibrary` alias and passes that identical
+install path to Dock. The path check and Valve's licence/authentication gates
+are unchanged; no game payload is copied internally. The user confirmed gameplay
+through the alias; Dock reported the expected install verified, client error 0
+and game running. Full-source native E: client registration, restart/reconnect,
+and one-time installer execution still need physical validation. See [EXTERNAL_STORAGE.md](EXTERNAL_STORAGE.md)
+for the mixed-source build's native-bridge limitations and validation ledger.

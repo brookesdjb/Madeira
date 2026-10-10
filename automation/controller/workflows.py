@@ -23,6 +23,8 @@ class Run:
     def __init__(self, device, native, info, bundle_id, path):
         self.device, self.native, self.info = device, native, info
         self.bundle_id, self.path = bundle_id, Path(path)
+        self.restore_orientation = None
+        self.probe_pid = None
         root = Path(__file__).resolve().parents[2]
         try:
             commit = subprocess.check_output(["git", "-C", str(root), "rev-parse", "HEAD"], text=True).strip()
@@ -64,13 +66,39 @@ class Run:
         if state != expected:
             raise AutomationError(f"unexpected_app_state:{state}:expected_{expected}")
 
+    def target_stopped(self):
+        state = self.device.app_state(self.bundle_id)
+        if state in (0, 1): return True
+        # XCTest can report background state for a running app extension even
+        # after the main app exits. A real suspended main process still blocks.
+        if state in (2, 3):
+            return not self.native.app_process_ids(self.info["udid"], self.bundle_id)
+        return False
+
+    def stop_owned_probe(self):
+        result = self.native.terminate_probe_process(self.info["udid"], self.bundle_id, self.probe_pid)
+        # Native termination ends the debugged PID; tell XCTest the app has
+        # stopped too, releasing its launch registration before a new session.
+        self.device.terminate_app(self.bundle_id)
+        if self.native.app_process_ids(self.info["udid"], self.bundle_id):
+            raise AutomationError("probe_process_still_running_after_xctest_cleanup")
+        return result
+
     def finish(self, terminate=True):
         # No retry/reinstall/reset: a missing session can mean a disconnected device.
         self.diagnostics()
         if terminate:
             try:
-                self.step("terminate", lambda: self.device.terminate_app(self.bundle_id))
-                self.step("verify_terminated", lambda: self.require_state(1))
+                if self.probe_pid is not None:
+                    self.step("terminate_owned_probe_and_verify_native", self.stop_owned_probe)
+                else:
+                    self.step("terminate", lambda: self.device.terminate_app(self.bundle_id))
+                    self.step("verify_terminated", lambda: self.require_state(1))
+            except Exception:
+                self.report["status"] = "failed"
+        if self.restore_orientation:
+            try:
+                self.step("restore_orientation", lambda: self.device.call("POST", "/orientation", {"orientation": self.restore_orientation}))
             except Exception:
                 self.report["status"] = "failed"
         try:
@@ -84,9 +112,17 @@ class Run:
     def smoke(self, frontend="library"):
         launched = False
         try:
-            if self.device.app_state(self.bundle_id) not in (0, 1):
+            if not self.target_stopped():
                 raise AutomationError("smoke_requires_Madeira_stopped_to_preserve_active_games")
-            self.step("launch", lambda: self.device.launch_app(self.bundle_id))
+            if frontend == "developer":
+                # Existing developer tooling is portrait-only; landscape is
+                # the game surface. Restore the owner's orientation at cleanup.
+                self.restore_orientation = self.step("read_orientation", lambda: self.device.call("GET", "/orientation"))
+                self.step("portrait_tooling", lambda: self.device.call("POST", "/orientation", {"orientation": "PORTRAIT"}))
+            # Foundation's argument domain selects this process's UI without
+            # rewriting the user's persistent frontend preference.
+            arguments = ["-madeiraFrontend", "old" if frontend == "developer" else "new"]
+            self.step("launch", lambda: self.device.launch_app(self.bundle_id, arguments))
             launched = True
             self.step("verify_foreground", lambda: self.require_state(4))
             if frontend == "library":

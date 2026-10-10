@@ -1,0 +1,103 @@
+{
+  "schema_version": 1,
+  "integration_branch": "integration/ipad",
+  "source_merge_commit": "60748b41f03030c60c77f5ea7b68b0535261ba39",
+  "inputs": [
+    {
+      "name": "upstream",
+      "ref": "origin/main",
+      "commit": "48f976429c189f8396e23d251d8a82f43c705922"
+    },
+    {
+      "name": "automation-19",
+      "ref": "codex/a3-local-game-lifecycle",
+      "commit": "55b9af7bdc8529acc23ce3f4876fb92d1820896c"
+    },
+    {
+      "name": "ssd-upstream",
+      "ref": "feature/ssd-upstream",
+      "commit": "df2540c0e181d6f2c33f3dcf1fcc358c752a1b0c"
+    },
+    {
+      "name": "local-opengl-ssd",
+      "ref": "feature/external-ssd-library",
+      "commit": "c4ebd4a6723714ce55d49ab572ff35265eee9270"
+    },
+    {
+      "name": "x1-20",
+      "ref": "perf/x1-diagnostic-gates",
+      "commit": "5d97e8ffae8c50c88fd25d404f0ff8fca5b462f9"
+    },
+    {
+      "name": "g1-21",
+      "ref": "perf/g1-cache-validation",
+      "commit": "ef2d1fcd42f05f38ee0b7a5ca39455a739c95033"
+    },
+    {
+      "name": "w1-22",
+      "ref": "perf/w1-wake-coalescing",
+      "commit": "5ba42e5adc57f1fee9fe6bfe461e3f356a6e8072"
+    },
+    {
+      "name": "g2-23",
+      "ref": "perf/g2-worker-cap-experiment",
+      "commit": "d5f2944591eb1042c628ad22a65739022863db2f"
+    },
+    {
+      "name": "f2-24",
+      "ref": "perf/f2-jit-experiment",
+      "commit": "2414908a2741fe8dc8b2f13fa8d57eb62416868e"
+    },
+    {
+      "name": "telemetry-25",
+      "ref": "perf/baseline-telemetry",
+      "commit": "028c036ecb06ad7a27fa5e757a89e21f55dfaa61"
+    },
+    {
+      "name": "capture-26",
+      "ref": "perf/native-frame-capture",
+      "commit": "14f1d4d81ff2178a6cf16b604e98f5b6c678bc83"
+    },
+    {
+      "name": "replay-27",
+      "ref": "automation/gameplay-replay",
+      "commit": "154079167883c1f7de4ef7d4c0a2c45377427892"
+    },
+    {
+      "name": "transport-39",
+      "ref": "automation/paired-command-transport",
+      "commit": "ca05873f9f79018374f89df4510032ffe3056b80"
+    }
+  ],
+  "control_branch": "integration/ipad-control",
+  "control_commit": "5cf22968d75a2081adf9b6d8c2c6e7d25f023c7f",
+  "validation": {
+    "harness_host": "152 passed, 2 device wrappers skipped",
+    "swift_ios": "66 production sources, normal Debug and opted-in automation type-check passed",
+    "native_ios": "changed ntdll and wineserver sources compile as arm64 objects",
+    "affected_host_checks": [
+      "frontend",
+      "steam-library",
+      "steam-games",
+      "dock-contract",
+      "dock-installers",
+      "task-profilers",
+      "request-wake",
+      "ios-cache",
+      "compiler-cap"
+    ],
+    "app_link": "SIGNED_AUTOMATION_DEBUG_BUILT",
+    "install": "SAME_BUNDLE_INSTALLED_WITHOUT_UNINSTALL",
+    "device_performance": "VERIFIED_W1_OFF_ON_STATIC_PILOT_NO_SPEEDUP_ACCEPTED",
+    "normal_exclusion": "corrected native archives: signed Debug and Release passed",
+    "measured_app_source": "0a44cdedbfbf15b783e3b593f2c5054d98a372ae",
+    "command_transport": {
+      "host": "ACTUAL_SWIFT_LISTENER_TESTED_ON_MACOS",
+      "signed_builds": "AUTOMATION_DEBUG_NORMAL_DEBUG_RELEASE_PASSED",
+      "physical": "NOT_INSTALLED_OR_TESTED",
+      "wifi": "SUPPORTED_ROUTE_NOT_PHYSICALLY_VERIFIED"
+    }
+  },
+  "experimental_patches_applied": false,
+  "control_status": "OLDER_SOURCE_NOT_MATCHED_TO_NEW_CAPTURE_REPLAY"
+}

@@ -1,28 +1,43 @@
 # Implementation status
 
-Base: 48f976429c189f8396e23d251d8a82f43c705922. Host: Linux x86_64.
-No physical iPad, macOS SDK, Xcode, or simulator is available to this session.
+Base: 48f976429c189f8396e23d251d8a82f43c705922.
+Initial implementation ran on Linux x86_64 without Xcode or a physical iPad.
+Continuation on 2026-10-10 uses macOS 27 / Apple Silicon and Xcode 27.0.
+See [Mac validation](mac-validation.md) for current verified results and gates.
 
 | Milestone | Implemented | Tests / actual results | Remaining / limitations | Physical validation |
 |---|---|---|---|---|
-| 0 investigation | Source map, build/signing/runtime/JIT/input/log inspection | Repository cloned and inspected, Python/Node found, Xcode absent | Submodule internals not fetched; actual Mac/device inventory unknown | BLOCKED |
-| 1 controller | devicectl discovery/.app install; W3C Appium UI/lifecycle/screenshots; JSON CLI; per-step smoke reports; safe diagnostic events; bounded cleanup | 25 pytest host tests pass; 2 physical tests skipped, including real HTTP against a fake Appium server, install mismatch rejection and failure cleanup | Build/sign/WDA provision on Mac; verify real devicectl schema and SwiftUI tab identifiers; IPA install omitted | BLOCKED |
-| 2 JIT coexistence | Investigation, opt-in XCTest status pane, bounded compatibility experiment | Mock tests cover success, failed x86 result, timeout, termination and fresh-process reactivation; no physical experiment performed | Must demonstrate JIT + responsive WDA + x86 execution; no claim of compatibility | BLOCKED |
-| 3 internal API | Minimal debug-only status/JIT/FEX probe via XCTest | Compile guards checked by host source test; Swift not compiled | Full game lifecycle API deferred until smoke/JIT gate; Release binary exclusion unverified | NOT TESTED |
-| 4 game input | Existing integration points mapped | None | Virtual source, bounded release, recorder/replay; no direct bridge writes added | NOT TESTED |
-| 5 visual checks | External screenshots, run association, crop/threshold comparison and suspected blank detection; ignore masks, difference images, bounded capture manifest and calibrated per-checkpoint comparison ([visual-evidence.md](visual-evidence.md)) | Mock capture plus 21 synthetic-image/manifest tests pass on Linux | Actual Metal screenshot fidelity, real calibration files, capture overhead, wiring CaptureLog into the device workflow | NOT TESTED |
-| 6 performance | Existing telemetry mapped, no new counters | None | Real per-frame instrumentation and explicit CPU/GPU distinction | NOT TESTED |
-| 7 benchmarks | Deferred | None | Requires trustworthy launch readiness/input/measurements; do not benchmark sleeps or fake FPS | NOT TESTED |
-| 8 agent integration | make setup/check/build/install/smoke/jit, JSON actions, exit codes | Host smoke workflow tested | JIT/game/benchmark milestones still gated; no infinite retries | BLOCKED |
+| 0 investigation | Source map, build/signing/runtime/JIT/input/log inspection | Mac toolchain and existing component inputs inventoried; M5 iPad/iPadOS 26.7 paired/Developer Mode/wired USB verified | Initial owner trust, UI Automation and signing setup completed; unlock recurs after Auto-Lock | PREPARATION VERIFIED |
+| 1 controller | devicectl discovery/.app install; W3C Appium UI/lifecycle/screenshots; JSON CLI; safe diagnostics; shared reservation; running-target install protection; private build/startup reports | Normal Debug, automation Debug, Release and WDA compile/sign on Mac; 79 host tests pass, 2 physical wrappers skipped; separate app installed via wired USB | Three physical UI runs pass across library/developer routes after initial XCTest prompt approval; running-target refusal and owned fixture persistence verified; forced disconnect/live-game saves untested; IPA install omitted | UI SMOKE PASSED |
+| 2 JIT coexistence | Investigation, opt-in XCTest status pane, bounded compatibility experiment | Mock tests cover success, failed x86 result, timeout, termination and fresh-process reactivation; physical built-in JIT, attached debugger, fresh UI, exit 42, new PID and reactivation observed | Two consecutive native launch/cleanup runs and subsequent UI smoke pass; StikDebug, normal-game detach and Shortcut restoration untested | CORE OBSERVED |
+| 3 internal API | Debug-only correlated command v2, status/JIT/FEX probe via XCTest; host Portal menu checkpoint; stable presentation-window anchor | Physical read/rejection, opt-in guard, installed Portal API launch/startup reads/replay/second-session rejection and live menu checkpoint pass; all four automation markers absent from normal Debug/Release | API stop accepted but Portal ignored Alt+F4; bounded timeout preserves it. Authorized game Quit and normal cloud-close UI succeed. Failed-startup recovery, richer diagnostics and API stop completion remain open | LOCAL PORTAL LAUNCH/MENU OBSERVED |
+| 4 game input | Debug-only bounded timed keyboard, relative mouse and serial-queue virtual-pad replay; stable early slot reservation | Physical Portal menu/save navigation and mouse camera response; native host-timeout observed | Pad stick response, focus/background injection, independent held-key release checks and frame alignment remain | KEYBOARD/MOUSE OBSERVED |
+| 5 visual checks | External screenshots, run association, crop/threshold comparison and suspected blank detection; English Portal menu recognition; ignore masks, difference images, bounded capture manifest and calibrated per-checkpoint comparison ([visual-evidence.md](visual-evidence.md)) | Synthetic-image/manifest tests and live Portal checkpoint pass; actual Source splash rejected; game/menu/overlay pixels inspected | Broad Metal fidelity, gameplay checkpoints, per-game calibration files, capture overhead and wiring CaptureLog into the device workflow | PORTAL MENU OBSERVED |
+| 6 performance | Single bounded native submission recorder, strict trace importer and process CPU/footprint boundary sidecar | Physical loss-free menu/gameplay traces; linked signed measurement build; normal Debug/Release markers excluded | Visible-frame/GPU/per-role CPU attribution, calibrated clocks and observer-overhead acceptance remain | SUBMISSION DELIVERY OBSERVED |
+| 7 benchmarks | On-device warmup/capture windows; correlated frozen trace and process sidecar export | Short physical captures and first W1 control arm | Scene checkpoints reviewed by agent; repeated paired/sustained trials and optimization acceptance remain | PRELIMINARY CAPTURES |
+| 8 agent integration | make setup/check/build/install/smoke/jit, JSON actions, exit codes | Host failures/current unlock gate tested; UI and standalone built-in JIT proof observed | Standalone lifecycle repeats pass; full-game lifecycle, input and benchmarks remain; no infinite retries | PARTIAL |
 
-Physical milestone 1 is NOT complete just because host-side code is committed.
-First developer action: use setup.md on the USB-connected provisioned Mac and
-run device-smoke-test. Retain its report before proceeding to JIT experiments.
+Physical UI smoke now passes on the provisioned USB iPad; source, binary and
+private run references are in mac-validation.md. Two consecutive standalone JIT/restart tests also pass; see jit-compatibility.md.
+The owner replaced the SSD-dependent game requirement with local Portal.
+Portal installed internally, synced 14 cloud saves through a standard retry and
+reached a rendered main menu through normal Play and the command API. Menu input
+and a two-screenshot host checkpoint are observed. The owner authorized handling
+quit/save/overwrite prompts. Game Quit and normal cloud-close UI succeeded;
+full API stop completion remains open. Keyboard/mouse timed replay and capture delivery are now observed; pad response and broader interruption checks remain.
+See [game validation](game-validation.md).
+Forced physical failure injection and live-game save/cloud checks remain untested.
 
-Appium 3.8.0 and XCUITest 12.16.0 installed from npm lockfile on Linux;
+Historical initial Linux environment: Appium 3.8.0 and XCUITest 12.16.0 installed from npm lockfile;
 `appium driver list --installed` successfully recognizes xcuitest. A real loopback Appium server starts and its
-/status reports ready. This is not a
-successful XCUITest session. Direct Git push lacked credentials; commits are
+/status reports ready. That initial check did not establish a successful XCUITest session; the Mac/iPad
+continuation above now has direct session evidence. Direct Git push lacked credentials; commits are
 published to the user-authorized `brookesdjb/Madeira` branch
 `codex/physical-ipad-automation` through the GitHub connector, with identical Git
 trees and different commit metadata. No default branch or upstream change.
+
+## Performance consumer progress
+
+A bounded offline native submission-trace consumer is implemented and host-tested
+for issues #2/#14. It validates the shared version 1 contract and exports private
+raw/summary reports. The native producer and timed input/capture runner now supply physical submission traces and whole-app CPU boundary counters. GPU and per-role CPU attribution, repeated trial acceptance and a representative iPad performance baseline remain incomplete.

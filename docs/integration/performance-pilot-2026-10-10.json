@@ -1,0 +1,154 @@
+{
+  "schema_version": 1,
+  "status": "PILOT_ONLY_NO_SPEEDUP_ACCEPTED",
+  "app_source_commit": "0a44cdedbfbf15b783e3b593f2c5054d98a372ae",
+  "build_report": "20261010T104344.683373Z-076c3c1e",
+  "native_inputs": {
+    "libwineserver.a": {
+      "sha256": "6881ae67a7da459fa88e5d6b723e2f83a4d9f2dd40abe3964722d70a99cde750",
+      "members": 49,
+      "entry_point_definitions": {
+        "_main_loop": 1,
+        "_ios_srv_wake_sem": 1
+      }
+    },
+    "libntdll_unix.a": {
+      "sha256": "808b32b05b89e3817c154dac55e44521f9148bf041e30786ef79cdba5b6c98a2",
+      "members": 38,
+      "entry_point_definitions": {
+        "_wine_server_call": 1,
+        "_server_call_unlocked": 1
+      }
+    }
+  },
+  "scene": "Portal First Slice test chamber 00: preserved test save facing wall, neutral input",
+  "order": [
+    "on",
+    "off"
+  ],
+  "warmup_seconds": 15,
+  "capture_seconds": 30,
+  "repetitions": 1,
+  "scene_comparison": {
+    "status": "within_threshold",
+    "suspected_black": false,
+    "suspected_uniform": false,
+    "changed_fraction": 0.0,
+    "pixel_threshold": 20,
+    "allowed_changed_fraction": 0.03,
+    "mean_channel_difference": 0.0005217094794271425,
+    "crop": [
+      40,
+      60,
+      1700,
+      1120
+    ],
+    "note": "A dark/loading scene or dynamic content can explain a difference; this is not a source regression verdict."
+  },
+  "arms": {
+    "off": {
+      "run_id": "20261010T105130.643830Z-a6aebbd5",
+      "metrics": {
+        "schema_version": 1,
+        "capture_id": "BCFC4ABE-E985-4844-8C13-31D5C1C390E9",
+        "clock": "clock_monotonic_ns",
+        "scope": "present_submission",
+        "samples": 1800,
+        "intervals": 1799,
+        "elapsed_ms": 29983.205,
+        "submission_rate_hz": 60.000256810437705,
+        "submission_interval_ms": {
+          "mean": 16.6665953307393,
+          "p50": 16.666,
+          "p95": 16.735,
+          "p99": 16.945,
+          "max": 17.006
+        },
+        "percentile_method": "nearest_rank",
+        "budget_ms": 16.666666666666668,
+        "over_budget_submission_intervals": 867,
+        "visible_frame_interval_ms": null,
+        "cpu_encode_ms": null,
+        "cpu_submit_ms": null,
+        "gpu_execution_ms": null,
+        "per_role_cpu": null,
+        "hardware_validation": "not_established_by_import"
+      },
+      "process_capture": {
+        "user_cpu_ns": 8720399000,
+        "footprint_before_bytes": 2810697584,
+        "footprint_after_bytes": 2810779504,
+        "scope": "whole_app_process",
+        "schema_version": 1,
+        "system_cpu_ns": 4665245000,
+        "capture_id": "BCFC4ABE-E985-4844-8C13-31D5C1C390E9",
+        "wineserver_wake_mode": 0,
+        "clock": "clock_monotonic_ns",
+        "wall_ns": 29999089000,
+        "mean_cpu_cores": 0.44620168299110685
+      },
+      "environment": {
+        "MADEIRA_SRV_COALESCE": "0",
+        "MADEIRA_PROFILE_THREADS": "0",
+        "MADEIRA_PROFILE_XP": "0",
+        "MADEIRA_PROFILE_STACKS": "0"
+      }
+    },
+    "on": {
+      "run_id": "20261010T104657.801251Z-16f9ed22",
+      "metrics": {
+        "schema_version": 1,
+        "capture_id": "4F67AAE3-CF3F-4A3F-8AAB-3CB66F500301",
+        "clock": "clock_monotonic_ns",
+        "scope": "present_submission",
+        "samples": 1800,
+        "intervals": 1799,
+        "elapsed_ms": 29985.161,
+        "submission_rate_hz": 59.99634285772219,
+        "submission_interval_ms": {
+          "mean": 16.667682601445247,
+          "p50": 16.667,
+          "p95": 16.757,
+          "p99": 16.958,
+          "max": 17.013
+        },
+        "percentile_method": "nearest_rank",
+        "budget_ms": 16.666666666666668,
+        "over_budget_submission_intervals": 923,
+        "visible_frame_interval_ms": null,
+        "cpu_encode_ms": null,
+        "cpu_submit_ms": null,
+        "gpu_execution_ms": null,
+        "per_role_cpu": null,
+        "hardware_validation": "not_established_by_import"
+      },
+      "process_capture": {
+        "user_cpu_ns": 8873818000,
+        "footprint_before_bytes": 2808452928,
+        "footprint_after_bytes": 2806421312,
+        "scope": "whole_app_process",
+        "schema_version": 1,
+        "system_cpu_ns": 4452929000,
+        "capture_id": "4F67AAE3-CF3F-4A3F-8AAB-3CB66F500301",
+        "wineserver_wake_mode": 1,
+        "clock": "clock_monotonic_ns",
+        "wall_ns": 30001544000,
+        "mean_cpu_cores": 0.4442020384017569
+      },
+      "environment": {
+        "MADEIRA_SRV_COALESCE": "1",
+        "MADEIRA_PROFILE_THREADS": "0",
+        "MADEIRA_PROFILE_XP": "0",
+        "MADEIRA_PROFILE_STACKS": "0"
+      }
+    }
+  },
+  "limits": [
+    "Static scene with approximately 60 Hz submission pacing",
+    "Submission intervals are not displayed frames or GPU execution",
+    "Whole-app CPU includes UI and capture/heartbeat work",
+    "One pair, no randomization, observer-overhead calibration or sustained gameplay acceptance",
+    "X1 profiler settings identical off in both arms; not an untouched upstream/X1 baseline",
+    "Earlier captures with duplicate archive runtime entry-point owners excluded from optimization conclusions"
+  ]
+}
