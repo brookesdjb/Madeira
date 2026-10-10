@@ -226,7 +226,9 @@ class DeviceControl:
             raise AutomationError("jit_probe_requires_Madeira_stopped_before_start")
         args = ["device", "process", "launch", "--device", udid]
         if environment: args.extend(["--environment-variables", json.dumps(environment,separators=(',',':'))])
-        self.command([*args, bundle_id, "--", "--madeira-automation"], 30)
+        arguments = ['--madeira-automation']
+        if environment: arguments.append('--madeira-experiment='+json.dumps(environment,separators=(',',':')))
+        self.command([*args, bundle_id, "--", *arguments], 30)
         pids = self.app_process_ids(udid, bundle_id)
         if len(pids) != 1:
             raise AutomationError("probe_launch_process_identity_unavailable")
