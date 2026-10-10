@@ -1,0 +1,97 @@
+# Checks that need no Mac, iPhone or iPad. They run on every push and pull
+# request so that work landing in parallel is checked against main before
+# anyone spends a device run on it. Device testing stays manual.
+name: Linux checks
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  LLVM_MINGW: llvm-mingw-20260421-ucrt-ubuntu-22.04-x86_64
+
+jobs:
+  host-checks:
+    name: Host checks (tests/host)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+          fetch-depth: 1
+      # check-steam-library.py reads zstd through compression.zstd (3.14+).
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.14'
+      - name: Tool versions
+        run: |
+          python3 --version
+          swiftc --version || echo "no swiftc on this runner"
+      - name: Run tests/host
+        run: python3 .github/scripts/run-host-checks.py
+
+  native-tests:
+    name: Native unit tests
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+          fetch-depth: 1
+      - name: DXIL conversion cache (madeira-d3d12)
+        run: |
+          cc -std=c11 -D_DEFAULT_SOURCE -Wall -Wextra -Werror -I madeira-d3d12/src \
+             madeira-d3d12/tests/native/dxil_cache_test.c -o "$RUNNER_TEMP/dxil_cache_test"
+          "$RUNNER_TEMP/dxil_cache_test"
+      - name: BCn decoder (dxmt)
+        run: bash tests/dxmt/build-bcn-host-test.sh
+      - name: Automation controller
+        run: |
+          if [ -d automation/tests ]; then
+            python3 -m pip install --quiet pytest
+            python3 -m pytest -q automation/tests
+          else
+            echo "no automation/tests on this branch"
+          fi
+
+  madeira-d3d12:
+    name: madeira-d3d12 cross-compile
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+          fetch-depth: 1
+      - name: Fetch llvm-mingw
+        run: |
+          curl -sSfL -o "$RUNNER_TEMP/llvm-mingw.tar.xz" \
+            "https://github.com/mstorsjo/llvm-mingw/releases/download/20260421/$LLVM_MINGW.tar.xz"
+          tar -C "$RUNNER_TEMP" -xf "$RUNNER_TEMP/llvm-mingw.tar.xz"
+          echo "$RUNNER_TEMP/$LLVM_MINGW/bin" >> "$GITHUB_PATH"
+      - name: Stub vtables match d3d12.h
+        run: |
+          python3 madeira-d3d12/src/pe/gen_vtables.py \
+            "$RUNNER_TEMP/$LLVM_MINGW/generic-w64-mingw32/include/d3d12.h" "$RUNNER_TEMP/stubs.h" >/dev/null
+          diff -u madeira-d3d12/src/pe/madeira_d3d12_stubs.h "$RUNNER_TEMP/stubs.h"
+      # Compile only: linking needs libwinemetal from a DXMT build.
+      - name: madeira_d3d12 and d3d12core (arm64ec)
+        run: |
+          S=madeira-d3d12/src/pe
+          arm64ec-w64-mingw32-clang -c -O2 -Wall -o "$RUNNER_TEMP/madeira_d3d12.o" "$S/madeira_d3d12.c" \
+            -I"$S" -Imadeira-d3d12/src -Idxmt/src/winemetal
+          arm64ec-w64-mingw32-clang -shared -O2 -Wall -o "$RUNNER_TEMP/d3d12core.dll" "$S/d3d12core.c" "$S/d3d12core.def"
+      - name: Guest test programs (x86_64)
+        run: |
+          T=madeira-d3d12/tests/windows
+          for t in m2_abi vfetch_test cube_window; do
+            x86_64-w64-mingw32-clang -O2 -Wall -o "$RUNNER_TEMP/$t.exe" "$T/$t.c" -I"$T" -luuid -lole32
+          done
