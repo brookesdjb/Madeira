@@ -6,7 +6,7 @@ import uuid
 from .device import AutomationError
 
 OPERATIONS = {"get_status", "list_installed_games", "launch_game", "stop_game",
-              "get_game_status", "get_runtime_status", "get_jit_status", "get_diagnostics"}
+              "start_frame_capture", "stop_frame_capture", "get_game_status", "get_runtime_status", "get_jit_status", "get_diagnostics"}
 
 
 def command(device, operation, *, library_id=None, steam_app_id=None, request_id=None, reply_timeout=15):

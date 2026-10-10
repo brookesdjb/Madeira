@@ -24,6 +24,7 @@ def inspect_app(app, automation, signed):
     native_fixture = any(b"fex_automation_test_execute" in b for b in contents)
     game_surface = any(b"madeira.automation.command" in b for b in contents)
     presentation_anchor = any(b"winios_automation_set_presentation_window" in b for b in contents)
+    frame_capture = any(b"madeira.automation.frame-capture" in b for b in contents)
     # Check actual compiled app binaries, not just source #if declarations.
     if probe != automation:
         raise AutomationError("compiled_automation_surface_mismatch")
@@ -33,6 +34,8 @@ def inspect_app(app, automation, signed):
         raise AutomationError("compiled_automation_game_surface_mismatch")
     if presentation_anchor != automation:
         raise AutomationError("compiled_automation_presentation_anchor_mismatch")
+    if frame_capture != automation:
+        raise AutomationError("compiled_frame_capture_mismatch")
     if signed:
         verified = subprocess.run(["codesign", "--verify", "--deep", "--strict", str(app)],
                                   capture_output=True)
