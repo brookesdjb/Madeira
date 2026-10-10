@@ -155,3 +155,16 @@ def test_probe_source_is_double_compile_gated_and_runtime_opt_in():
     assert 'arguments.contains("--madeira-automation")' in declaration
     assert declaration.rstrip().endswith("#endif")
     assert "run() // Existing ContentView.runFEXTest" in declaration
+
+
+def test_refresh_waits_for_new_swiftui_publication():
+    class DelayedDevice(ProbeDevice):
+        def __init__(self):
+            super().__init__(); self.reads = 0; self.clicked = False
+        def tap_id(self, identifier): self.clicked = True
+        def value(self, identifier):
+            self.reads += 1
+            return json.dumps({"schema_version":1,"sequence":int(self.clicked and self.reads >= 4)})
+    device = DelayedDevice()
+    assert snapshot(device)["sequence"] == 1
+    assert device.reads == 4
