@@ -50,9 +50,13 @@ def wait_for(workflow, condition, seconds=100, clock=time.monotonic, pause=time.
         except AutomationError as exc:
             # Opening StikDebug/Shortcuts can race the foreground-state query.
             # Keep the original process and bounded deadline during that switch.
-            if str(exc) == "no such element" and workflow.device.app_state(workflow.bundle_id) not in (0, 1, 4):
-                pause(1)
-                continue
+            if str(exc) == "no such element":
+                observed = workflow.device.app_state(workflow.bundle_id)
+                if observed in (0, 1):
+                    raise AutomationError("Madeira_terminated_during_JIT_probe") from None
+                if observed != 4:
+                    pause(1)
+                    continue
             raise
         workflow.report.setdefault("ui_refresh_timings", []).append({
             "sequence": result.get("sequence"),

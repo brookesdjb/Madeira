@@ -131,6 +131,18 @@ def test_foreground_switch_race_preserves_process_and_retries_with_deadline(tmp_
     assert r["pid"] == 20 and device.terminations == 0
 
 
+def test_termination_between_foreground_query_and_refresh_is_not_a_UI_failure(tmp_path):
+    class ExitingDevice(ProbeDevice):
+        def tap_id(self, identifier):
+            self.state = 1
+            raise AutomationError("no such element")
+    device = ExitingDevice()
+    device.state = 4
+    with pytest.raises(AutomationError, match="Madeira_terminated_during_JIT_probe"):
+        wait_for(workflow(tmp_path, device), lambda _: True)
+    assert device.terminations == 0
+
+
 def test_probe_source_is_double_compile_gated_and_runtime_opt_in():
     # This is a packaging guard, NOT a Swift compile or physical-device test.
     path = Path(__file__).resolve().parents[2] / "app/Madeira/ContentView.swift"

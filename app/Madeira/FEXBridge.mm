@@ -762,7 +762,6 @@ static int64_t execute_test_elf(const uint8_t *elf_data, size_t elf_size, int64_
         }
         fex_log("WATCHDOG: Execution timed out after 5s!");
     });
-    watchdog.detach();
 
     fex_log("Executing x86-64 code through FEXCore...");
 
@@ -777,6 +776,9 @@ static int64_t execute_test_elf(const uint8_t *elf_data, size_t elf_size, int64_
     }
 
     execution_done.store(true);
+    // The watchdog captures execution_done on this stack and reads Thread.
+    // Finish it before either lifetime ends, including the fast sys_exit path.
+    watchdog.join();
 
     g_exit_jmp_set = false;
 
