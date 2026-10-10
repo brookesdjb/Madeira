@@ -4815,6 +4815,16 @@ struct MappingPanel: View {
             reply("completed", data: AutomationGameplayReplay.shared.status)
         case .replayStatus:
             reply("completed", data: AutomationGameplayReplay.shared.status)
+        case .captureStart:
+            guard ownedGame != nil, model.current == ownedGame, !model.launching, !stopRequested,
+                  UIApplication.shared.applicationState == .active else { reply("rejected", "active_owned_session_required"); return }
+            let started = madeira_automation_capture_start()
+            guard started > 0 else { reply("rejected", started < 0 ? "native_capture_hook_missing" : "capture_already_active"); return }
+            reply("accepted", "capture_started")
+        case .captureStop:
+            madeira_automation_capture_stop()
+            let status = String(cString: madeira_automation_capture_export())
+            reply(status.hasSuffix(":exported") ? "completed" : "rejected", status.hasSuffix(":exported") ? "capture_exported" : status)
         case .games:
             // Existing library entries only. No account or arbitrary filesystem discovery.
             reply("completed", data: installedEntries().map {
