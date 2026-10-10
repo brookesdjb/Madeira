@@ -40,3 +40,14 @@ system CPU time and `TASK_VM_INFO` for footprint. The monotonic wall window
 brackets recorder activation/drain; these are whole app CPU totals, including
 UI heartbeat work, not Wine role attribution, frame encoding or GPU timing.
 Unavailable counters export null. No extra query is added to Present.
+
+Physical delivery on 2026-10-10: the isolated integrated signed Debug app ran
+Portal via the harness/JIT workflow on the wired M5 iPad. A ten-second menu
+capture exported 600 events; a fifteen-second existing-save gameplay capture
+exported 899. Both passed contiguous-sequence, monotonic-clock and loss checks.
+A later thirty-second capture exported 1,799 events with matching whole-app CPU,
+footprint and initialized W1 mode 0. These prove callback/export delivery, not
+visible-frame timing, clock calibration, observer overhead or an optimization.
+Normal signed Debug/Release builds using the original native Present source
+passed actual marker exclusion checks before the later wake-policy accessor
+addition. No app data was reset; existing saves were backed up privately.
