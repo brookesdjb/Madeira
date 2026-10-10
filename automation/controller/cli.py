@@ -138,7 +138,11 @@ def main(argv=None):
             connection_started = time.time()
             transports = ExitStack()
             try:
-                workflow.step("connect", lambda: device.connect(info["udid"], args.bundle_id, args.team, args.wda_bundle))
+                socket_run = args.command in {"game-command", "benchmark-capture"} and args.command_transport == "socket"
+                # Socket-only waits do not refresh Appium's session timer. Allow
+                # the bounded 900s warmup + 900s capture and export margin.
+                workflow.step("connect", lambda: device.connect(info["udid"], args.bundle_id, args.team, args.wda_bundle,
+                    idle_timeout=2100 if socket_run else 180))
                 if args.command in {"game-command", "benchmark-capture"} and args.command_transport == "socket":
                     from .transport import attach_transport
                     pids = native.app_process_ids(info["udid"], args.bundle_id)
