@@ -62,12 +62,17 @@
       "name": "replay-27",
       "ref": "automation/gameplay-replay",
       "commit": "154079167883c1f7de4ef7d4c0a2c45377427892"
+    },
+    {
+      "name": "transport-39",
+      "ref": "automation/paired-command-transport",
+      "commit": "ca05873f9f79018374f89df4510032ffe3056b80"
     }
   ],
   "control_branch": "integration/ipad-control",
   "control_commit": "5cf22968d75a2081adf9b6d8c2c6e7d25f023c7f",
   "validation": {
-    "harness_host": "136 passed, 2 device wrappers skipped",
+    "harness_host": "152 passed, 2 device wrappers skipped",
     "swift_ios": "66 production sources, normal Debug and opted-in automation type-check passed",
     "native_ios": "changed ntdll and wineserver sources compile as arm64 objects",
     "affected_host_checks": [
@@ -85,7 +90,13 @@
     "install": "SAME_BUNDLE_INSTALLED_WITHOUT_UNINSTALL",
     "device_performance": "VERIFIED_W1_OFF_ON_STATIC_PILOT_NO_SPEEDUP_ACCEPTED",
     "normal_exclusion": "corrected native archives: signed Debug and Release passed",
-    "measured_app_source": "0a44cdedbfbf15b783e3b593f2c5054d98a372ae"
+    "measured_app_source": "0a44cdedbfbf15b783e3b593f2c5054d98a372ae",
+    "command_transport": {
+      "host": "ACTUAL_SWIFT_LISTENER_TESTED_ON_MACOS",
+      "signed_builds": "AUTOMATION_DEBUG_NORMAL_DEBUG_RELEASE_PASSED",
+      "physical": "NOT_INSTALLED_OR_TESTED",
+      "wifi": "SUPPORTED_ROUTE_NOT_PHYSICALLY_VERIFIED"
+    }
   },
   "experimental_patches_applied": false,
   "control_status": "OLDER_SOURCE_NOT_MATCHED_TO_NEW_CAPTURE_REPLAY"

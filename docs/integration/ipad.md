@@ -98,19 +98,28 @@ history. G2 native/PE submodule changes will need their own upstream dependency
 and gitlink handling. Keep PR235 separate from local-only OpenGL and automation.
 Do not close draft acceptance gaps merely because the combined source passes.
 
-## Command transport follow-up
+## Paired command transport (PR #39)
 
-The inherited XCTest command text field is a prototype transport. JSON entry and
-keyboard dismissal happen before measured replay; capture runs natively with
-Refresh heartbeats. This avoids typing inside the measured window, but repeated
-UI control still changes focus and adds app/UI overhead. There is no existing
-app command socket; the debugger/JIT connection is not a gameplay control protocol.
-Before long campaigns, replace repeated text-field control with a Debug-only
-bidirectional channel forwarded over USB, retaining the current validated request
-schema, correlation ledger, owned-session checks and stop/watchdog semantics.
-Use a private per-process capability, bounded messages and loopback-only endpoints;
-retain XCTest for visual checkpoints/JIT interaction. This transport is planned,
-not implemented or physically verified by the present results.
+The Debug-only transport is implemented and integrated. It reuses the command
+parser/ledger and owned-session checks over a single authenticated loopback TCP
+connection. `iproxy` supports USB and paired Wi-Fi routes. Commands no longer
+require text-field entry when attached, and snapshot heartbeats do not publish
+SwiftUI updates. Disconnect releases active replay input and interrupts capture
+without killing the game. XCTest remains available for bootstrap/screenshots and
+an explicitly selected legacy fallback. See `../automation/protocol.md`.
+
+Validation: 152 host tests passed, two device wrappers skipped. The actual Swift
+listener runs on macOS with host-only probe/replay stand-ins. Signed automation
+Debug, ordinary Debug and Release builds passed; ordinary app binaries exclude
+the endpoint marker. The source changes were built before committing them (build
+reports correctly record a dirty source tree); the existing local Wine changes
+and native input archives were preserved.
+
+The new build has NOT been installed or tested on iPad. No device action was
+taken while the owner installs Tomb Raider. Both USB command/capture delivery
+and the entire Wi-Fi/JIT/XCTest route still need physical checks. Existing W1
+pilot results below used the prior XCTest transport, so establish a new baseline
+with this transport before testing more changes.
 
 ## Verified W1 pilot after archive correction
 
@@ -126,7 +135,7 @@ accepted performance improvement. Defaults and issue acceptance remain unchanged
 The source, archive hashes, metrics and limitations are frozen in
 `performance-pilot-2026-10-10.json`. Earlier ambiguous-archive runs are excluded.
 
-Next: replace repeated XCTest JSON text entry with the USB command transport
-before a longer representative gameplay campaign; verify watchdog/input-release
-behavior on that transport; obtain repeated paired baselines; then test X1, W1,
+Next: install and physically verify the paired command transport when the owner
+has finished installing the game; verify watchdog/input-release behavior and
+capture through that transport; obtain repeated paired baselines; then test X1, W1,
 G1 and eligible F2 settings independently. G2 patches remain unapplied.
