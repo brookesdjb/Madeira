@@ -4806,9 +4806,9 @@ struct MappingPanel: View {
             guard model.current == nil, !launchRequested, LibraryModel.sessionsThisRun == 0, GamepadInput.enabled else { reply("rejected", "fresh_idle_process_required"); return }
             GamepadInput.shared.reserveAutomation()
             reply("completed", "input_reserved")
-        case .replayStart:
+        case .replayStart, .benchmarkStart:
             guard ownedGame != nil, model.current == ownedGame, !model.launching, !stopRequested,
-                  let plan = request.replay, AutomationGameplayReplay.shared.start(plan) else { reply("rejected", "replay_requires_owned_focused_session"); return }
+                  let plan = request.replay, AutomationGameplayReplay.shared.start(plan, warmup: request.warmup_ms, duration: request.capture_ms) else { reply("rejected", "replay_requires_owned_focused_session"); return }
             reply("accepted", "replay_started")
         case .replayStop:
             AutomationGameplayReplay.shared.stop("host_stopped")
@@ -4958,6 +4958,9 @@ private struct AutomationProbePanel: View {
     private var origin: UInt64 = 0, lastHeartbeat: UInt64 = 0
     private var index = 0
     private var lateness: [Int] = []
+    private var captureWarmup: Int?, captureDuration: Int?
+    private var captureStarted = false
+    private var captureState = "NOT_RUN"
     private var outcome = "NOT_RUN"
     private var observer: NSObjectProtocol?
     private init() {
@@ -4966,10 +4969,11 @@ private struct AutomationProbePanel: View {
         }
     }
     var status: [String: Any] { ["state": outcome, "events_applied": index, "lateness_us": lateness,
-        "clock": "dispatch_uptime_ns", "frame_alignment": "NOT_ESTABLISHED"] }
+        "capture_state": captureState, "clock": "dispatch_uptime_ns", "frame_alignment": "NOT_ESTABLISHED"] }
     func heartbeat() { lastHeartbeat = DispatchTime.now().uptimeNanoseconds }
-    func start(_ value: AutomationReplayPlan) -> Bool {
+    func start(_ value: AutomationReplayPlan, warmup: Int? = nil, duration: Int? = nil) -> Bool {
         guard timer == nil, value.valid(), HardwareInput.shared.automationFocus() else { return false }
+        captureWarmup = warmup; captureDuration = duration; captureStarted = false; captureState = "NOT_RUN"
         plan = value; index = 0; lateness = []; origin = DispatchTime.now().uptimeNanoseconds
         heartbeat(); outcome = "RUNNING"
         let source = Timer(timeInterval: 0.004, repeats: true) { [weak self] _ in MainActor.assumeIsolated { self?.tick() } }
@@ -4982,6 +4986,18 @@ private struct AutomationProbePanel: View {
               LibraryModel.shared.current != nil, HardwareInput.shared.automationFocus() else { stop("FOCUS_LOST"); return }
         guard now - lastHeartbeat < 10000000000 else { stop("HOST_TIMEOUT"); return }
         let elapsed = (now - origin) / 1000000
+        if let warmup = captureWarmup, let duration = captureDuration {
+            if !captureStarted && elapsed >= UInt64(warmup) {
+                guard madeira_automation_capture_start() > 0 else { stop("CAPTURE_UNAVAILABLE"); return }
+                captureStarted = true; captureState = "RECORDING"
+            }
+            if captureStarted && elapsed >= UInt64(warmup + duration) {
+                madeira_automation_capture_stop()
+                let result = String(cString: madeira_automation_capture_export())
+                captureState = result.hasSuffix(":exported") ? "EXPORTED" : "EXPORT_FAILED"
+                stop(captureState == "EXPORTED" ? "COMPLETED" : "CAPTURE_EXPORT_FAILED"); return
+            }
+        }
         if elapsed >= UInt64(plan.duration_ms) { stop("COMPLETED"); return }
         while index < plan.events.count && UInt64(plan.events[index].at_ms) <= elapsed {
             let event = plan.events[index]
@@ -4994,6 +5010,7 @@ private struct AutomationProbePanel: View {
         }
     }
     func stop(_ reason: String) {
+        if captureState == "RECORDING" { madeira_automation_capture_stop(); captureState = "INTERRUPTED" }
         timer?.invalidate(); timer = nil; plan = nil; outcome = reason
         HardwareInput.shared.automationSetKeys([])
         GamepadInput.shared.automation(GamepadSample())

@@ -7,6 +7,7 @@ struct AutomationCommand: Decodable {
         case status = "get_status", games = "list_installed_games"
         case launch = "launch_game", stop = "stop_game"
         case game = "get_game_status", runtime = "get_runtime_status"
+        case benchmarkStart = "start_benchmark"
         case inputReserve = "reserve_input", replayStart = "start_replay", replayStop = "stop_replay", replayStatus = "get_replay_status"
         case captureStart = "start_frame_capture", captureStop = "stop_frame_capture"
         case jit = "get_jit_status", diagnostics = "get_diagnostics"
@@ -17,11 +18,13 @@ struct AutomationCommand: Decodable {
     let library_id: UUID?
     let steam_app_id: Int?
     let replay: AutomationReplayPlan?
+    let warmup_ms: Int?
+    let capture_ms: Int?
 
     static func parse(_ text: String) throws -> Self {
         guard let bytes = text.data(using: .utf8), bytes.count <= 4096,
               let object = try? JSONSerialization.jsonObject(with: bytes) as? [String: Any],
-              Set(object.keys).isSubset(of: ["schema_version", "request_id", "operation", "library_id", "steam_app_id", "replay"]),
+              Set(object.keys).isSubset(of: ["schema_version", "request_id", "operation", "library_id", "steam_app_id", "replay", "warmup_ms", "capture_ms"]),
               let request = try? JSONDecoder().decode(Self.self, from: bytes),
               request.schema_version == 2, !request.request_id.isEmpty,
               request.request_id.utf8.count <= 64,
@@ -31,12 +34,17 @@ struct AutomationCommand: Decodable {
         if request.operation == .launch || request.operation == .stop {
             guard selectors == 1 else { throw Failure.invalidRequest }
         } else if selectors != 0 { throw Failure.invalidRequest }
-        if request.operation == .replayStart {
+        if request.operation == .replayStart || request.operation == .benchmarkStart {
             guard let plan = request.replay, plan.valid(), let raw = object["replay"] as? [String: Any],
                   Set(raw.keys) == Set(["duration_ms", "events"]),
                   let events = raw["events"] as? [[String: Any]],
                   events.allSatisfy({ Set($0.keys).isSubset(of: ["at_ms", "keys", "dx", "dy", "buttons", "lx", "ly", "rx", "ry"]) }) else { throw Failure.invalidRequest }
         } else if request.replay != nil { throw Failure.invalidRequest }
+        if request.operation == .benchmarkStart {
+            guard let warmup = request.warmup_ms, let duration = request.capture_ms,
+                  (0...900000).contains(warmup), (1...900000).contains(duration),
+                  warmup + duration == request.replay?.duration_ms else { throw Failure.invalidRequest }
+        } else if request.warmup_ms != nil || request.capture_ms != nil { throw Failure.invalidRequest }
         return request
     }
 

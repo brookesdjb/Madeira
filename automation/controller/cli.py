@@ -51,6 +51,10 @@ def parser():
     telemetry = sub.add_parser("summarize-telemetry", help="Offline raw native submission trace; no device mutation")
     telemetry.add_argument("trace")
     telemetry.add_argument("--budget-ms", type=float, default=1000 / 60)
+    benchmark = sub.add_parser("benchmark-capture", help="Owned game only; local timing, heartbeat and frozen trace export")
+    benchmark.add_argument("plan")
+    benchmark.add_argument("--warmup", type=int, default=60)
+    benchmark.add_argument("--seconds", type=int, default=180)
     sub.add_parser("jit-test")
     visual = sub.add_parser("compare-images")
     visual.add_argument("baseline")
@@ -136,6 +140,12 @@ def main(argv=None):
                 elif args.command == "jit-test":
                     from .jit_probe import probe
                     result = probe(workflow)
+                elif args.command == "benchmark-capture":
+                    from .benchmark import capture
+                    workflow.report["benchmark"] = workflow.step("benchmark_capture", lambda:
+                        capture(workflow, json.loads(Path(args.plan).read_text()), args.warmup, args.seconds))
+                    workflow.report["status"] = "passed"
+                    result = workflow.finish(terminate=False)
                 elif args.command == "game-checkpoint":
                     from .checkpoints import wait_for_portal_menu
                     workflow.require_state(4)

@@ -6,10 +6,10 @@ import uuid
 from .device import AutomationError
 
 OPERATIONS = {"get_status", "list_installed_games", "launch_game", "stop_game",
-              "start_frame_capture", "stop_frame_capture", "reserve_input", "start_replay", "stop_replay", "get_replay_status", "get_game_status", "get_runtime_status", "get_jit_status", "get_diagnostics"}
+              "start_frame_capture", "stop_frame_capture", "reserve_input", "start_benchmark", "start_replay", "stop_replay", "get_replay_status", "get_game_status", "get_runtime_status", "get_jit_status", "get_diagnostics"}
 
 
-def command(device, operation, *, library_id=None, steam_app_id=None, request_id=None, reply_timeout=15, replay=None):
+def command(device, operation, *, library_id=None, steam_app_id=None, request_id=None, reply_timeout=15, replay=None, warmup_ms=None, capture_ms=None):
     request_id = request_id or uuid.uuid4().hex
     if operation not in OPERATIONS or not re.fullmatch(r"[A-Za-z0-9_-]{1,64}", request_id):
         raise AutomationError("invalid_game_command")
@@ -24,11 +24,17 @@ def command(device, operation, *, library_id=None, steam_app_id=None, request_id
         if isinstance(steam_app_id, bool) or not isinstance(steam_app_id, int) or steam_app_id <= 0:
             raise AutomationError("invalid_game_selector")
         request["steam_app_id"] = steam_app_id
-    if operation == "start_replay":
+    if operation in {"start_replay", "start_benchmark"}:
         from .replay import validate_plan
         request["replay"] = validate_plan(replay)
     elif replay is not None:
         raise AutomationError("unexpected_replay_plan")
+    if operation == "start_benchmark":
+        if type(warmup_ms) is not int or type(capture_ms) is not int or not 0 <= warmup_ms <= 900000 or not 1 <= capture_ms <= 900000 or warmup_ms + capture_ms != replay["duration_ms"]:
+            raise AutomationError("invalid_benchmark_window")
+        request.update(warmup_ms=warmup_ms, capture_ms=capture_ms)
+    elif warmup_ms is not None or capture_ms is not None:
+        raise AutomationError("unexpected_benchmark_window")
     if len(json.dumps(request, separators=(",", ":")).encode()) > 4096:
         raise AutomationError("replay_request_too_large")
     element = device.find("madeira.automation.command")

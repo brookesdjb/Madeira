@@ -44,3 +44,10 @@ for bad in [
 ''')
     subprocess.run(['swiftc','-D','DEBUG','-D','MADEIRA_AUTOMATION',str(source),str(main),'-o',str(exe)],check=True,capture_output=True)
     subprocess.run([str(exe)],check=True)
+
+
+def test_invalid_benchmark_window_has_no_ui_effect():
+    class Device:
+        def find(self, name): raise AssertionError('invalid window touched UI')
+    with pytest.raises(AutomationError):
+        command(Device(),'start_benchmark',replay=plan(),warmup_ms=1000,capture_ms=2000)
