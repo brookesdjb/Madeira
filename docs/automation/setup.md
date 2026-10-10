@@ -226,3 +226,33 @@ passes repeated hardware validation; see jit-compatibility.md. Auto-Lock still
 requires owner unlock before another run.
 The native exit-42 fixture is compiled only into opted-in Debug, with the same
 ELF loader as the normal exit-0 Hello World test.
+
+
+## Direct command connection
+
+Install `iproxy` (libusbmuxd) on the Mac. Use the automation-enabled build and
+launch it with `--madeira-automation`. The socket CLI requires an already-running
+process; it never launches or replaces a game merely to attach. See
+[protocol.md](protocol.md#paired-command-transport-v1) for the framing, security
+boundary, disconnect semantics and validation limits.
+
+For a continuous test, hold the existing device reservation around this scope:
+
+```python
+from automation.controller.transport import attach_transport
+from automation.controller.game_control import command
+from automation.controller.jit_probe import snapshot
+
+# device is the connected Appium controller; pid is the verified current
+# Madeira main PID. The caller already holds reserve_device(udid, ...).
+with attach_transport(device, native, udid, bundle_id, pid, route="usb"):
+    state = snapshot(device)  # Direct request/reply, no keyboard or Refresh tap.
+    reply = command(device, "get_game_status")
+    # Existing benchmark.capture uses this connection and refreshes every 2 s.
+```
+
+Use `route="wifi"` only after wireless pairing/discovery is verified. First USB
+pairing/provisioning may still be necessary, and the existing JIT bootstrap is
+separate from this command channel. The route switch does not itself establish
+wireless device readiness. Keep the device connection/power conditions identical
+across paired performance runs, since those conditions may affect thermals.

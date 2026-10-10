@@ -1355,6 +1355,7 @@ struct ContentView: View {
                     AutomationProbe.shared.enableJIT = enableJIT
                     AutomationProbe.shared.runFEX = runFEXTest
                     AutomationProbe.shared.launch = { launchLibraryEntry($0) }
+                    AutomationTransport.shared.start()
                     TouchControlsHost.attach()
                 }
                 #endif
@@ -4716,7 +4717,7 @@ struct MappingPanel: View {
 
 #if DEBUG && MADEIRA_AUTOMATION
 /// Narrow XCTest-accessible probe, compiled out unless BOTH flags are set.
-/// No socket, URL handler, arbitrary code evaluation or account operations.
+/// Shared by the XCTest fallback and authenticated paired-device transport.
 @MainActor final class AutomationProbe: ObservableObject {
     static let enabled = ProcessInfo.processInfo.arguments.contains("--madeira-automation")
     static let shared = AutomationProbe()
@@ -4735,7 +4736,8 @@ struct MappingPanel: View {
     private var result: Int64?
     private var sequence = 0
 
-    func refresh() {
+    @discardableResult
+    func refresh(publish: Bool = true) -> String {
         sequence += 1
         let jit = JITCoordinator.shared
         let model = LibraryModel.shared
@@ -4784,8 +4786,9 @@ struct MappingPanel: View {
                 "last_error": model.error == nil ? NSNull() : "normal_launch_error" as Any]
         ]
         guard let encoded = try? JSONSerialization.data(withJSONObject: data, options: [.sortedKeys]),
-              let text = String(data: encoded, encoding: .utf8) else { return }
-        snapshot = text
+              let text = String(data: encoded, encoding: .utf8) else { return snapshot }
+        if publish { snapshot = text }
+        return text
     }
 
     func command(_ text: String, launch: (LibraryEntry) -> Void) {
