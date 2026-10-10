@@ -1,0 +1,79 @@
+{
+  "schema_version": 1,
+  "integration_branch": "integration/ipad",
+  "source_merge_commit": "9883eb0356fa530d5e9d62e7df4da27666e2c13f",
+  "inputs": [
+    {
+      "name": "upstream",
+      "ref": "origin/main",
+      "commit": "48f976429c189f8396e23d251d8a82f43c705922"
+    },
+    {
+      "name": "automation-19",
+      "ref": "codex/a3-local-game-lifecycle",
+      "commit": "55b9af7bdc8529acc23ce3f4876fb92d1820896c"
+    },
+    {
+      "name": "ssd-upstream",
+      "ref": "feature/ssd-upstream",
+      "commit": "df2540c0e181d6f2c33f3dcf1fcc358c752a1b0c"
+    },
+    {
+      "name": "local-opengl-ssd",
+      "ref": "feature/external-ssd-library",
+      "commit": "c4ebd4a6723714ce55d49ab572ff35265eee9270"
+    },
+    {
+      "name": "x1-20",
+      "ref": "perf/x1-diagnostic-gates",
+      "commit": "5d97e8ffae8c50c88fd25d404f0ff8fca5b462f9"
+    },
+    {
+      "name": "g1-21",
+      "ref": "perf/g1-cache-validation",
+      "commit": "ef2d1fcd42f05f38ee0b7a5ca39455a739c95033"
+    },
+    {
+      "name": "w1-22",
+      "ref": "perf/w1-wake-coalescing",
+      "commit": "46598caedc1d22011bcc3ddf1f16352e5518d60e"
+    },
+    {
+      "name": "g2-23",
+      "ref": "perf/g2-worker-cap-experiment",
+      "commit": "d5f2944591eb1042c628ad22a65739022863db2f"
+    },
+    {
+      "name": "f2-24",
+      "ref": "perf/f2-jit-experiment",
+      "commit": "2414908a2741fe8dc8b2f13fa8d57eb62416868e"
+    },
+    {
+      "name": "telemetry-25",
+      "ref": "perf/baseline-telemetry",
+      "commit": "028c036ecb06ad7a27fa5e757a89e21f55dfaa61"
+    }
+  ],
+  "control_branch": "integration/ipad-control",
+  "control_commit": "5cf22968d75a2081adf9b6d8c2c6e7d25f023c7f",
+  "validation": {
+    "harness_host": "104 passed, 2 device wrappers skipped",
+    "swift_ios": "66 production sources, normal Debug and opted-in automation type-check passed",
+    "native_ios": "changed ntdll and wineserver sources compile as arm64 objects",
+    "affected_host_checks": [
+      "frontend",
+      "steam-library",
+      "steam-games",
+      "dock-contract",
+      "dock-installers",
+      "task-profilers",
+      "request-wake",
+      "ios-cache",
+      "compiler-cap"
+    ],
+    "app_link": "NOT_PERFORMED",
+    "install": "NOT_PERFORMED",
+    "device_performance": "NOT_PERFORMED"
+  },
+  "experimental_patches_applied": false
+}
