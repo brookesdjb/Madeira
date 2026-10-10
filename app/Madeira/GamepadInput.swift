@@ -303,10 +303,23 @@ final class GamepadInput: @unchecked Sendable {
         return UInt8((max(0, min(1, value)) * 255).rounded())
     }
 
+#if DEBUG && MADEIRA_AUTOMATION
+    private var automationReserved = false
+    private var automationState = GamepadSample()
+    @MainActor func reserveAutomation() {
+        queue.sync { automationReserved = true; sample() }
+    }
+    @MainActor func automation(_ value: GamepadSample) {
+        queue.async { [self] in automationState = value; sample() }
+    }
+#endif
     private func sample() {
         for i in profiles.indices {
             let pad = profiles[i]
-            let touchConnected = i == 0 && touchState.connected
+            var touchConnected = i == 0 && touchState.connected
+#if DEBUG && MADEIRA_AUTOMATION
+            touchConnected = touchConnected || (i == 0 && automationReserved)
+#endif
             // Player 1's pad went away mid-press: nothing feeds the driver now, so
             // release the keys and buttons it holds.
             if i == 0, pad == nil, keyboardMouse != nil, PadKeyboardMouse.shared.holding {
@@ -382,6 +395,13 @@ final class GamepadInput: @unchecked Sendable {
                 state.left_trigger = merged.lt; state.right_trigger = merged.rt
                 state.lx = merged.lx; state.ly = merged.ly; state.rx = merged.rx; state.ry = merged.ry
             }
+#if DEBUG && MADEIRA_AUTOMATION
+            if i == 0 && automationReserved && active && !LibraryController.shared.ownsInput {
+                let merged = GamepadSample.merge(physical: GamepadSample(buttons: state.buttons, lt: state.left_trigger, rt: state.right_trigger, lx: state.lx, ly: state.ly, rx: state.rx, ry: state.ry), touch: automationState)
+                state.buttons = merged.buttons; state.left_trigger = merged.lt; state.right_trigger = merged.rt
+                state.lx = merged.lx; state.ly = merged.ly; state.rx = merged.rx; state.ry = merged.ry
+            }
+#endif
             if hid {
                 publishHID(state, live: hidLive, pad: pad)
                 // One controller, one API: player 1 is not also an XInput pad,
