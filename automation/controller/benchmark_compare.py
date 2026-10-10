@@ -1,5 +1,6 @@
 """Compare independent benchmark iterations offline; never attribute a difference to source alone."""
 import json
+import hashlib
 import math
 from pathlib import Path
 import random
@@ -13,6 +14,7 @@ MAX_BYTES = 1024 * 1024
 MAX_ITERATIONS = 200
 # Direction says which way is better. Submission cadence is not visible FPS (see benchmarks.md).
 METRICS = {
+    "game_reported_fps": "higher",
     "submission_interval_p50_ms": "lower", "submission_interval_p95_ms": "lower",
     "submission_interval_p99_ms": "lower", "submission_rate_hz": "higher",
     "loading_ms": "lower", "footprint_peak_bytes": "lower", "mean_cpu_cores": "lower",
@@ -32,15 +34,23 @@ def _integer(value, minimum=0):
 
 
 def validate_iteration(value):
-    if not isinstance(value, dict) or set(value) != FIELDS:
+    if not isinstance(value, dict) or set(value) != (FIELDS | {"runtime_config"} if value.get("schema_version") == 2 else FIELDS):
         raise AutomationError("invalid_iteration_fields")
-    if type(value["schema_version"]) is not int or value["schema_version"] != 1:
+    if type(value["schema_version"]) is not int or value["schema_version"] not in {1, 2}:
         raise AutomationError("unsupported_iteration_schema")
     conditions = value["conditions"]
     if (not isinstance(conditions, dict) or set(conditions) != CONDITIONS
             or not all(isinstance(v, str) and 1 <= len(v) <= 128 for v in conditions.values())
             or conditions["cache_phase"] not in CACHE_PHASES):
         raise AutomationError("invalid_iteration_conditions")
+    if value["schema_version"] == 2:
+        config = value["runtime_config"]
+        if (not isinstance(config, dict) or not 1 <= len(config) <= 64
+                or any(not isinstance(k, str) or not re.fullmatch(r"[A-Za-z0-9_.-]{1,64}", k)
+                       or not isinstance(v, str) or not 1 <= len(v) <= 128 for k, v in config.items())):
+            raise AutomationError("invalid_runtime_config")
+        if runtime_digest(config) != conditions["runtime_config_digest"]:
+            raise AutomationError("runtime_config_digest_mismatch")
     source = value["source"]
     if (not isinstance(source, dict) or set(source) != {"commit", "dirty", "binary_sha256"}
             or not isinstance(source["commit"], str) or re.fullmatch(r"[0-9a-f]{40}", source["commit"]) is None
@@ -131,7 +141,14 @@ def _compare_metric(name, base, cand, min_iterations, min_effect, max_cv, resamp
     return {**result, "verdict": "inconclusive", "reason": "interval_spans_threshold"}
 
 
-def compare(baseline, candidate, min_iterations=5, min_effect=0.03, max_cv=0.15, resamples=2000, seed=1):
+def runtime_digest(config):
+    return hashlib.sha256(json.dumps(config, sort_keys=True, separators=(",", ":"), ensure_ascii=True).encode()).hexdigest()
+
+
+def compare(baseline, candidate, min_iterations=5, min_effect=0.03, max_cv=0.15, resamples=2000, seed=1, experiment=None):
+    allowed_experiments = {"MADEIRA_SRV_COALESCE", "MADEIRA_PROFILE_THREADS", "MADEIRA_PROFILE_XP", "MADEIRA_PROFILE_STACKS", "DXMT_IOS_CACHE_DIR", "FEX_MAXINST"}
+    if experiment is not None and (not isinstance(experiment, str) or experiment not in allowed_experiments):
+        raise AutomationError("invalid_experimental_variable")
     if type(min_iterations) is not int or not 3 <= min_iterations <= MAX_ITERATIONS:
         raise AutomationError("invalid_min_iterations")
     for value, upper in ((min_effect, 1), (max_cv, 10)):
@@ -155,6 +172,21 @@ def compare(baseline, candidate, min_iterations=5, min_effect=0.03, max_cv=0.15,
         return {**report, "status": "inconclusive", "reason": "conditions_vary_within_side"}
     mismatched = sorted(k for k in CONDITIONS if conditions["baseline"][k] != conditions["candidate"][k])
     report["conditions"] = conditions["baseline"]
+    if experiment is not None:
+        if any(i["schema_version"] != 2 for i in baseline + candidate):
+            raise AutomationError("runtime_experiment_requires_schema_2")
+        configs = {side: _uniform(items, "runtime_config") for side, items in sides.items()}
+        if any(c is None for c in configs.values()):
+            return {**report, "status": "inconclusive", "reason": "runtime_config_varies_within_side"}
+        b, c = configs["baseline"], configs["candidate"]
+        changed = {k for k in b.keys() | c.keys() if b.get(k) != c.get(k)}
+        if changed != {experiment} or experiment not in b or experiment not in c:
+            return {**report, "status": "inconclusive", "reason": "undeclared_or_missing_runtime_difference"}
+        if _uniform(baseline, "source") != _uniform(candidate, "source"):
+            return {**report, "status": "inconclusive", "reason": "runtime_experiment_requires_same_source"}
+        report["experiment"] = {"name": experiment, "baseline": b[experiment], "candidate": c[experiment],
+                                "baseline_runtime_digest": runtime_digest(b), "candidate_runtime_digest": runtime_digest(c)}
+        mismatched = [k for k in mismatched if k != "runtime_config_digest"]
     if mismatched:
         return {**report, "status": "inconclusive", "reason": "conditions_mismatch", "mismatched_conditions": mismatched}
     for side, items in sides.items():
