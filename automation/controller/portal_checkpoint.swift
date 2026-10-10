@@ -16,10 +16,20 @@ func normalized(_ text: String) -> String {
     String(text.lowercased().filter { $0.isLetter || $0.isNumber })
 }
 // This package's large blurred title produces "Hirst" for "First" on Vision.
-// Permit at most one substitution, with equal length; no substring matching.
+// Permit one substitution or one inserted/deleted glyph, with a bounded length.
+// Background shapes can join the title; partial titles and substrings still fail.
 func titleMatches(_ text: String) -> Bool {
     let expected = Array("portalthefirstslice"), actual = Array(normalized(text))
-    return actual.count == expected.count && zip(actual, expected).filter { $0 != $1 }.count <= 1
+    guard abs(actual.count - expected.count) <= 1 else { return false }
+    if actual.count == expected.count {
+        return zip(actual, expected).filter { $0 != $1 }.count <= 1
+    }
+    let longer = actual.count > expected.count ? actual : expected
+    let shorter = actual.count > expected.count ? expected : actual
+    for omitted in longer.indices {
+        if longer.enumerated().filter({ $0.offset != omitted }).map({ $0.element }) == shorter { return true }
+    }
+    return false
 }
 let expected = ["new_game": "newgame", "options": "options", "quit": "quit"]
 var matches: [String: Bool] = ["title": false, "new_game": false, "options": false, "quit": false]

@@ -55,3 +55,12 @@ def test_inconsistent_ocr_result_cannot_claim_readiness(monkeypatch, tmp_path):
     result = recognized(False); result["passed"] = True
     with pytest.raises(AutomationError, match="invalid_portal_checkpoint_result"):
         c.recognize_portal_menu(tmp_path / "image.png", runner=lambda *a, **k: json.dumps(result))
+
+
+def test_actual_swift_title_match_remains_bounded(tmp_path):
+    import subprocess
+    source = (Path(__file__).resolve().parents[1]/"controller/portal_checkpoint.swift").read_text()
+    functions = source[source.index("func normalized"):source.index("let expected = [")]
+    script = tmp_path/"title.swift"
+    script.write_text("import Foundation\n" + functions + '\n' + 'for text in ["Portal: The First Slice", "aPortal: The First Slice", "Portal: The Hirst Slice"] { assert(titleMatches(text)) }\nfor text in ["Portal", "The First Slice", "xxPortal: The First Slice", "aPortal: The Hirst Slice", "Portal: The First Slice New Game"] { assert(!titleMatches(text)) }\n')
+    subprocess.run(["swift", str(script)], check=True, capture_output=True)
